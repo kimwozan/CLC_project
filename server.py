@@ -63,6 +63,12 @@ GUEST_SWEEP_SEC = int(os.environ.get("GUEST_SWEEP_SEC", "5"))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "app.db"))
 ALLOWED_EMAIL_DOMAIN = os.environ.get("ALLOWED_EMAIL_DOMAIN", "kangwon.ac.kr").lower()
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"  # HTTPS 운영 시 1
+# 프록시(Vercel rewrite 등) 뒤에서 운영할 때:
+#  TRUST_PROXY=1      → 요청 제한용 IP를 X-Forwarded-For 첫 번째 값(실제 접속자)으로 사용
+#  ALLOWED_ORIGINS    → 쓰기 요청(POST/PUT)을 허용할 화면 주소들 (예: https://clc.vercel.app), 쉼표 구분
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "0") == "1"
+ALLOWED_ORIGINS = {o.strip().lower().rstrip("/") for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()}
+_IP_RE = re.compile(r"^[0-9a-fA-F:.]{2,45}$")
 
 NAVER_AUTH_TYPE = os.environ.get("NAVER_AUTH_TYPE", "ncp").lower()  # ncp | developers
 NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "")
@@ -515,6 +521,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def client_ip(self):
+        """요청 제한·로그용 접속자 IP. TRUST_PROXY=1 이면 프록시가 전달한 실제 접속자 IP를 사용."""
+        if TRUST_PROXY:
+            first = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+            if _IP_RE.match(first):
+                return first
         return self.client_address[0]
 
     def send_json(self, status, payload, extra_headers=None):
@@ -541,6 +552,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """쓰기 요청 CSRF 방어: Origin이 있으면 Host와 일치해야 함."""
         origin = self.headers.get("Origin")
         if not origin:
+            return True
+        if origin.lower().rstrip("/") in ALLOWED_ORIGINS:
             return True
         host = self.headers.get("Host", "")
         return urllib.parse.urlparse(origin).netloc == host
@@ -820,7 +833,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     # ---- 네이버 API 키 관리 (서버를 실행 중인 PC에서 접속한 경우만 허용) ----
     def is_local_admin(self):
-        return self.client_ip() in ("127.0.0.1", "::1", "::ffff:127.0.0.1") and not self.headers.get("X-Forwarded-For")
+        # 프록시 뒤(배포 환경)에서는 항상 False: 실제 소켓 주소가 로컬이고 프록시 헤더가 없을 때만 허용
+        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1") and not self.headers.get("X-Forwarded-For")
 
     def api_get_keys(self):
         if not self.current_user():

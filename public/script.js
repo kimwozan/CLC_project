@@ -157,10 +157,7 @@ function switchTab(tabName) {
     if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) toggleMobileSidebar();
 
     if (tabName === 'dashboard') {
-        setTimeout(() => {
-            [lineChartInstance, gaugeChartInstance].forEach(c => c && c.resize());
-            playRadarAnimation();
-        }, 50);
+        setTimeout(() => [radarChartInstance, lineChartInstance, gaugeChartInstance].forEach(c => c && c.resize()), 50);
     } else if (tabName === 'recommand') {
         filterCerts(currentCertCategory);
     } else if (tabName === 'grades') {
@@ -621,7 +618,7 @@ function renderProfile() {
     const email = currentUser && currentUser.email ? currentUser.email : '';
     const displayName = s.name || (email ? email.split('@')[0] : '학생');
     $('profileName').innerText = displayName;
-    $('profileId').innerText = email || '이 브라우저에 저장됨';
+    $('profileId').innerText = email || '강원대학교';
     $('profileMajor').innerText = s.major || '전공 미입력';
     $('welcomeMessage').innerText = `${displayName}님, 환영합니다!`;
 }
@@ -672,15 +669,12 @@ function initChartsWithData() {
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            animation: { duration: 1400, easing: 'easeOutBack' },
+            animation: false,   // 종합 역량 차트는 펼쳐지는 애니메이션 없이 바로 표시
             scales: { r: { min: 0, max: 100, ticks: { display: false }, angleLines: { color: '#e2e8f0' }, grid: { color: '#cbd5e1' },
                 pointLabels: { color: '#334155', font: { size: 11, weight: 'bold' } } } },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } }
         }
     });
-    // 펼침 애니메이션의 목표값 (중심(0)에서 이 값까지 쫙 펴진다)
-    radarChartInstance._targets = radarChartInstance.data.datasets.map(ds => ds.data.slice());
-    playRadarAnimation();
 
     if (lineChartInstance) lineChartInstance.destroy();
     lineChartInstance = new Chart($('gpaLineChart').getContext('2d'), {
@@ -703,21 +697,6 @@ function initChartsWithData() {
     });
 }
 
-// 오각형이 중심에서 바깥으로 쫙 펴지는 애니메이션 (대시보드가 보일 때만 재생)
-function playRadarAnimation() {
-    const c = radarChartInstance;
-    if (!c || !c._targets || !c.canvas || c.canvas.offsetWidth === 0) return;   // 숨겨진 탭이면 탭을 열 때 재생
-    c.resize();
-    c.data.datasets.forEach((ds, i) => { ds.data = c._targets[i].map(() => 0); });
-    c.update('none');                                   // 중심점에 모은 상태로 시작
-    clearTimeout(playRadarAnimation._t);
-    playRadarAnimation._t = setTimeout(() => {          // 한 프레임 쉬고(rAF는 숨겨진 탭에서 멈추므로 타이머 사용) 펼치기
-        if (c !== radarChartInstance) return;           // 그 사이 차트가 다시 만들어졌으면 중단
-        c.data.datasets.forEach((ds, i) => { ds.data = c._targets[i].slice(); });
-        c.update();                                     // 목표값까지 펼치기
-    }, 40);
-}
-
 function updateRadarChart(val) {
     if (!radarChartInstance) return;
     const presets = {
@@ -726,7 +705,6 @@ function updateRadarChart(val) {
         backend: { data: [75, 85, 70, 60, 75], label: '목표 기준선 (SW 백엔드)' }
     };
     const p = presets[val] || presets.default;
-    radarChartInstance._targets[1] = p.data.slice();
     radarChartInstance.data.datasets[1].data = p.data;
     radarChartInstance.data.datasets[1].label = p.label;
     radarChartInstance.update();

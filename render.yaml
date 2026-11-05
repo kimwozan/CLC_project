@@ -1,0 +1,29 @@
+# Render Blueprint: API 서버(server.py)를 배포하는 설정 (화면은 Vercel)
+services:
+  - type: web
+    name: clc-api
+    runtime: python
+    plan: free
+    startCommand: python3 server.py
+    healthCheckPath: /index.html
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: HOST
+        value: 0.0.0.0
+      - key: LOGIN_MODE
+        value: guest
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: TRUST_PROXY
+        value: "1"
+      # Vercel 배포 주소로 바꿔 주세요 (예: https://clc.vercel.app). 쉼표로 여러 개 가능
+      - key: ALLOWED_ORIGINS
+        value: https://YOUR-APP.vercel.app
+      # 네이버 API 키는 값을 직접 입력 (코드/저장소에 넣지 않습니다)
+      - key: NAVER_AUTH_TYPE
+        value: ncp
+      - key: NAVER_CLIENT_ID
+        sync: false
+      - key: NAVER_CLIENT_SECRET
+        sync: false

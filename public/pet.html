@@ -340,7 +340,7 @@
             const email = user.email || '';
             const name = (spec && spec.name) || (email ? email.split('@')[0] : '학생');
             document.getElementById('profileName').innerText = name;
-            document.getElementById('profileId').innerText = email || '이 브라우저에 저장됨';
+            document.getElementById('profileId').innerText = email || '강원대학교';
             document.getElementById('profileMajor').innerText = (spec && spec.major) || '전공 미입력';
             document.getElementById('displayMyName').innerText = name;
 
