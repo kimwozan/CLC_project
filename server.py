@@ -523,6 +523,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def client_ip(self):
         """요청 제한·로그용 접속자 IP. TRUST_PROXY=1 이면 프록시가 전달한 실제 접속자 IP를 사용."""
         if TRUST_PROXY:
+            # Cloudflare 는 CF-Connecting-IP 를 항상 덮어써서 위조할 수 없다 → 우선 사용
+            cf = (self.headers.get("CF-Connecting-IP") or "").strip()
+            if _IP_RE.match(cf):
+                return cf
             first = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
             if _IP_RE.match(first):
                 return first
@@ -834,7 +838,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ---- 네이버 API 키 관리 (서버를 실행 중인 PC에서 접속한 경우만 허용) ----
     def is_local_admin(self):
         # 프록시 뒤(배포 환경)에서는 항상 False: 실제 소켓 주소가 로컬이고 프록시 헤더가 없을 때만 허용
-        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1") and not self.headers.get("X-Forwarded-For")
+        # (터널/프록시 트래픽도 소켓 주소는 127.0.0.1 로 보이므로, 프록시가 붙이는 헤더가 하나라도 있으면 거부)
+        proxied = any(self.headers.get(h) for h in
+                      ("X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP", "Forwarded", "CF-Connecting-IP", "CF-Ray", "CDN-Loop"))
+        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1") and not proxied
 
     def api_get_keys(self):
         if not self.current_user():

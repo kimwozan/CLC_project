@@ -570,6 +570,9 @@ async function handleSpecSubmit(event) {
     $('screen-spec-input').classList.add('hidden');
     showToast('스펙 정보가 저장되었습니다.');
     renderAll();
+    // 저장 후에는 항상 대시보드를 보여준다 (주소에 남은 #recommand 등도 정리)
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 무시 */ }
+    switchTab('dashboard');
 }
 
 // ==========================================
@@ -1139,8 +1142,11 @@ async function bootstrap() {
         openSpecModal();
         showToast('처음 오셨네요! 스펙 정보를 입력해주세요.');
     }
-    if (location.hash === '#recommand') switchTab('recommand');
-    if (location.hash === '#grades') switchTab('grades');
+    // 처음 방문(스펙 미입력)이면 주소의 #탭 이동은 무시하고 대시보드에서 시작한다
+    if (globalSpecData) {
+        if (location.hash === '#recommand') switchTab('recommand');
+        if (location.hash === '#grades') switchTab('grades');
+    }
 }
 
 window.addEventListener('DOMContentLoaded', bootstrap);
