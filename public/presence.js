@@ -29,6 +29,7 @@
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') ping(); });
     window.addEventListener('pageshow', (e) => { if (e.persisted) ping(); });   // 뒤로가기 캐시 복원
     window.addEventListener('pagehide', () => {
+        if (window.__clcStatic) return;   // 서버 없는 배포: 이 탭의 저장소가 닫힐 때 자동으로 사라짐
         if (navigator.sendBeacon) navigator.sendBeacon('/api/guest/leave');
     });
 })();

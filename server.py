@@ -10,6 +10,7 @@
 환경변수(.env 파일 지원) 목록은 .env.example 참고.
 """
 
+import concurrent.futures
 import hashlib
 import hmac
 import http.server
@@ -357,13 +358,16 @@ def extract_job_info(title, desc):
     return company, role, certs, passer
 
 
-def refresh_jobs():
-    """네이버 뉴스에서 채용정보를 수집해 DB에 저장. 성공한 질의가 하나라도 있으면 True."""
+def collect_jobs():
+    """네이버 뉴스에서 채용 기사를 수집하고 신뢰도를 매긴다 (DB 미사용 → 서버/Vercel 함수 공용).
+    반환: {링크: 정보} / 키가 없거나 모든 질의가 실패하면 None."""
     if not (NAVER_CLIENT_ID and NAVER_CLIENT_SECRET):
-        return False
+        return None
+    # 질의 6개를 동시에 호출 (서버리스 시간 제한 대비). map 은 질의 순서를 그대로 유지한다.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(JOB_QUERIES)) as ex:
+        results = list(ex.map(lambda q: call_naver_news(q, display=100), JOB_QUERIES))
     collected, ok_queries = {}, 0
-    for q in JOB_QUERIES:
-        res = call_naver_news(q, display=100)
+    for res in results:
         if res["status_code"] != 200:
             continue
         ok_queries += 1
@@ -384,7 +388,7 @@ def refresh_jobs():
                                "passer": passer, "pub_date": it.get("pubDate", ""), "host": host,
                                "score": score, "reasons": reasons}
     if not ok_queries:
-        return False
+        return None
     # 교차 검증: 같은 (기업, 자격증) 조합을 서로 다른 매체 2곳 이상이 보도하면 가점
     groups = {}
     for v in collected.values():
@@ -394,17 +398,25 @@ def refresh_jobs():
     for v in collected.values():
         if any(v["company"] and len(groups.get((v["company"], c), ())) >= 2 for c in v["certs"]):
             v["score"] += 15; v["reasons"].append("복수 매체 교차 보도")
+        v["score"] = max(0, min(100, v["score"]))
+        v["verdict"] = "trusted" if v["score"] >= 65 else ("review" if v["score"] >= 40 else "rejected")
+    return collected
+
+
+def refresh_jobs():
+    """채용정보를 수집해 DB에 저장. 성공하면 True."""
+    collected = collect_jobs()
+    if collected is None:
+        return False
     now = int(time.time())
     with _db_lock, db() as conn:
         conn.execute("DELETE FROM job_posts")
         for link, v in collected.items():
-            score = max(0, min(100, v["score"]))
-            verdict = "trusted" if score >= 65 else ("review" if score >= 40 else "rejected")
             conn.execute(
                 "INSERT INTO job_posts (link, title, company, role, certs, passer, pub_date, source, score, verdict, reasons, fetched_at) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (link, v["title"], v["company"], v["role"], json.dumps(v["certs"], ensure_ascii=False),
-                 1 if v["passer"] else 0, v["pub_date"], v["host"], score, verdict,
+                 1 if v["passer"] else 0, v["pub_date"], v["host"], v["score"], v["verdict"],
                  json.dumps(v["reasons"], ensure_ascii=False), now))
         conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('jobs_last_refresh', ?)", (str(now),))
     print(f"[JOBS] 갱신 완료: {len(collected)}건 수집", flush=True)
