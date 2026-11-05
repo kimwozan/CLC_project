@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>캠퍼스 스펙 트래커 - 곰두리 RPG 배틀 모드</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="min-h-screen bg-slate-100 flex flex-col md:flex-row relative overflow-x-hidden text-slate-800">
+
+    <!-- Mobile Top Navigation Header -->
+    <header class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center z-30 sticky top-0 w-full">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white text-lg font-bold shadow-md">
+                <i class="fa-solid fa-graduation-cap"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-slate-800 leading-tight text-sm">캠퍼스 스펙</h1>
+                <p class="text-[10px] text-slate-400 font-semibold tracking-wider">RPG BATTLE</p>
+            </div>
+        </div>
+        <button id="mobileMenuBtn" onclick="toggleMobileSidebar()" class="p-2 text-slate-600 hover:text-slate-900 focus:outline-none rounded-lg hover:bg-slate-100">
+            <i class="fa-solid fa-bars text-xl"></i>
+        </button>
+    </header>
+
+    <!-- Sidebar Background Overlay (Mobile) -->
+    <div id="sidebarOverlay" onclick="toggleMobileSidebar()" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 hidden md:hidden transition-opacity"></div>
+
+    <!-- 좌측 사이드바 -->
+    <aside id="sidebar" class="fixed md:static inset-y-0 left-0 w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out min-h-screen shadow-xl md:shadow-none flex-shrink-0">
+        <div class="space-y-6">
+            <!-- 로고 및 앱이름 (Desktop Only) -->
+            <div class="hidden md:flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-md">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <div>
+                    <h1 class="font-black text-slate-800 leading-tight">캠퍼스 스펙</h1>
+                    <p class="text-[11px] text-slate-400 font-bold tracking-wider">RPG BATTLE MODE</p>
+                </div>
+            </div>
+
+            <!-- 유저 프로필 카드: 강원대학교 AI공학 전공 정우진 -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-lg shadow-xs flex-shrink-0">
+                    👨‍🎓
+                </div>
+                <div class="text-xs min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <strong class="text-slate-800 font-extrabold text-sm">정우진</strong>
+                        <span id="profileId" class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold">21학번</span>
+                    </div>
+                    <p class="text-slate-500 truncate mt-0.5"><i class="fa-solid fa-building-columns text-[10px] mr-1 text-slate-400"></i><span id="profileUni" class="font-semibold text-slate-700">강원대학교</span></p>
+                    <p class="text-slate-500 truncate"><i class="fa-solid fa-microchip text-[10px] mr-1 text-cyan-500"></i><span id="profileMajor" class="font-semibold text-slate-700">AI공학 전공</span></p>
+                </div>
+            </div>
+
+            <!-- 사이드바 네비게이션 메뉴 -->
+            <nav class="space-y-1.5" id="nav-container">
+                <a href="index.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50">
+                    <i class="fa-solid fa-chart-line text-base text-blue-500"></i> 대시보드 (역량 분석)
+                </a>
+                <a href="pet.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition bg-blue-50 text-blue-600">
+                    <i class="fa-solid fa-gamepad text-base text-cyan-500"></i> RPG 배틀 모드
+                </a>
+                <a href="index.html#recommand" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50">
+                    <i class="fa-solid fa-certificate text-base text-purple-500"></i> AI 자격증 추천
+                </a>
+                <a href="#grades" onclick="showToast('성적 관리 기능은 준비 중입니다.')" class="flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm text-slate-400 hover:bg-slate-50 transition">
+                    <i class="fa-solid fa-graduation-cap text-base"></i> 성적 관리
+                </a>
+                <a href="#portfolio" onclick="showToast('포트폴리오 관리 기능은 준비 중입니다.')" class="flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm text-slate-400 hover:bg-slate-50 transition">
+                    <i class="fa-solid fa-folder-open text-base"></i> 포트폴리오
+                </a>
+            </nav>
+        </div>
+
+        <div class="pt-4 border-t border-slate-100">
+            <a href="index.html" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+                <i class="fa-solid fa-arrow-left"></i> 대시보드로 돌아가기
+            </a>
+        </div>
+    </aside>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full space-y-6">
+        <!-- Notification Toast Box -->
+        <div id="toastNotification" class="fixed bottom-5 right-5 z-[999] bg-slate-900/95 backdrop-blur text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-2xl transform translate-y-16 opacity-0 transition-all duration-300 flex items-center gap-2 border border-slate-700">
+            <i class="fa-solid fa-circle-info text-cyan-400"></i>
+            <span id="toastMessage">메시지</span>
+        </div>
+
+        <!-- 상단 헤더 -->
+        <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+            <div>
+                <span class="bg-cyan-50 border border-cyan-200 text-cyan-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 w-max mb-1">
+                    <span class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+                    스펙 게이미피케이션 RPG
+                </span>
+                <h2 class="text-xl sm:text-2xl font-black text-slate-800">
+                    🎮 곰두리 스펙 배틀 아레나
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">내 스펙(학점, 어학, 자격증, 대외활동)이 공격력(ATK)과 체력(HP)으로 실시간 환산됩니다.</p>
+            </div>
+            <a href="index.html" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-2 w-max">
+                <i class="fa-solid fa-chart-pie"></i> 역량 대시보드
+            </a>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            <!-- 왼쪽: 내 스펙 카드 영역 (lg:col-span-5) -->
+            <div class="lg:col-span-5 space-y-4">
+                <div class="card-panel rounded-3xl p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="mb-4">
+                            <div class="flex items-center justify-between font-bold text-xs mb-1 text-rose-500">
+                                <span><i class="fa-solid fa-heart text-rose-500"></i> 내 체력 (HP)</span>
+                                <span class="text-slate-700 font-extrabold"><span id="displayHp">386</span></span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-rose-100 p-0.5">
+                                <div class="bg-gradient-to-r from-rose-500 to-red-400 h-full rounded-full w-full"></div>
+                            </div>
+                        </div>
+                        <div class="my-6 flex items-center justify-center relative p-4">
+                            <div class="absolute inset-0 bg-cyan-500/10 rounded-full blur-2xl"></div>
+                            <!-- 곰두리 아바타 -->
+                            <div class="w-36 h-36 rounded-3xl bg-gradient-to-tr from-cyan-400 to-blue-500 flex items-center justify-center text-7xl shadow-xl transform hover:scale-105 transition cursor-pointer select-none">
+                                🐻‍❄️
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 text-center">
+                            <div class="text-xs font-bold text-cyan-700">강원대학교 AI공학 전공 정우진</div>
+                            <div class="text-lg font-black text-slate-800 mt-0.5">공격력 (ATK): <span class="text-blue-600"><span id="displayAtk">85.4</span></span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 내 스펙 상세 정보 박스 -->
+                <div class="card-panel rounded-3xl p-5 space-y-3">
+                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-500"></i> 내 스펙 상세 스탯</h3>
+                    <div class="space-y-2 text-xs">
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                            <span class="text-slate-500 font-medium">학년도 / 평점</span>
+                            <strong class="text-slate-800"><span id="displayGradeGpa">3학년 · 3.82 / 4.5 (이수 108학점)</span></strong>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                            <span class="text-slate-500 font-medium">어학 점수</span>
+                            <strong class="text-slate-800"><span id="displayLang">TOEIC 850점 (환산 반영됨)</span></strong>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center text-slate-500 font-semibold">
+                                <span>보유 자격증 (가산점 산출)</span>
+                            </div>
+                            <div id="displayCertList" class="text-slate-700 space-y-1 pl-2 border-l-2 border-blue-200">
+                                <div class="flex justify-between"><span>• SQLD (SQL 개발자)</span><span class="text-blue-600 font-bold">+10점</span></div>
+                                <div class="flex justify-between"><span>• ADsP (데이터분석 준전문가)</span><span class="text-blue-600 font-bold">+10점</span></div>
+                            </div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center text-slate-500 font-semibold">
+                                <span>대외 활동 (가산점 산출)</span>
+                            </div>
+                            <div id="displayExtraList" class="text-slate-700 space-y-1 pl-2 border-l-2 border-blue-200">
+                                <div class="flex justify-between"><span>• 교내 AI 학술동아리, DACON 경진대회 참가</span><span class="text-blue-600 font-bold">+10점</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 중앙: 전투 및 상호작용 액션 영역 (lg:col-span-2) -->
+            <div class="lg:col-span-2 flex flex-col justify-center items-center gap-4 py-8">
+                <!-- 1. 스펙 추가/수정 바로가기 -->
+                <a href="index.html" class="w-full py-5 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 text-white shadow-md bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 transition transform hover:-translate-y-0.5 text-center">
+                    <span class="text-[10px] bg-white/25 px-2 py-0.5 rounded-full font-bold">LIVE</span>
+                    <i class="fa-solid fa-plus-circle text-2xl"></i>
+                    <span class="text-xs font-bold text-blue-100">내 스펙</span>
+                    <span class="text-sm font-extrabold">갱신하러 가기</span>
+                </a>
+
+                <!-- 2. 곰두리 성장 버튼 -->
+                <button onclick="showToast('곰두리 AI 모델 파라미터가 강화되었습니다! ✨')" class="w-full py-4 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow-sm bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 transition">
+                    <i class="fa-solid fa-wand-magic-sparkles text-lg text-purple-600"></i>
+                    <span class="text-xs font-bold text-slate-500">곰두리</span>
+                    <span class="text-sm font-extrabold">강화하기</span>
+                </button>
+
+                <!-- 3. 전투 시작 버튼 -->
+                <button onclick="startBattle()" class="w-full py-5 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow-lg bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white transition transform active:scale-95">
+                    <i class="fa-solid fa-swords text-2xl animate-bounce"></i>
+                    <span class="text-sm font-black tracking-wide">스펙 배틀 시작!</span>
+                </button>
+            </div>
+
+            <!-- 오른쪽: 상대 스펙 카드 영역 (lg:col-span-5) -->
+            <div class="lg:col-span-5 space-y-4">
+                <div class="card-panel rounded-3xl p-6 flex flex-col justify-between">
+                    <div>
+                        <div class="mb-4">
+                            <div class="flex items-center justify-between font-bold text-xs mb-1 text-rose-500">
+                                <span><i class="fa-solid fa-heart text-rose-500"></i> 상대 체력 (HP)</span>
+                                <span class="text-slate-700 font-extrabold">364</span>
+                            </div>
+                            <div class="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-rose-100 p-0.5">
+                                <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full w-full"></div>
+                            </div>
+                        </div>
+                        <div class="my-6 flex items-center justify-center relative p-4">
+                            <div class="absolute inset-0 bg-purple-500/10 rounded-full blur-2xl"></div>
+                            <!-- 상대 캐릭터 -->
+                            <div class="w-36 h-36 rounded-3xl bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-7xl shadow-xl transform hover:scale-105 transition cursor-pointer select-none">
+                                🦁
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 text-center">
+                            <div class="text-xs font-bold text-purple-600">라이벌 컴퓨터공학과 라이온</div>
+                            <div class="text-lg font-black text-slate-800 mt-0.5">공격력 (ATK): <span class="text-purple-600">82.0</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 상대 스펙 상세 정보 박스 -->
+                <div class="card-panel rounded-3xl p-5 space-y-3">
+                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-shield-halved text-purple-500"></i> 라이벌 상세 스펙</h3>
+                    <div class="space-y-2 text-xs">
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                            <span class="text-slate-500 font-medium">학년도 / 평점</span>
+                            <strong class="text-slate-800">3학년 · 3.90 / 4.5 (이수 80학점)</strong>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                            <span class="text-slate-500 font-medium">어학 점수</span>
+                            <strong class="text-slate-800">TOEIC 800점 (환산 반영)</strong>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center text-slate-500 font-semibold">
+                                <span>보유 자격증 (가산점 총 +20점)</span>
+                            </div>
+                            <div class="text-slate-700 space-y-1 pl-2 border-l-2 border-purple-200">
+                                <div class="flex justify-between"><span>• 정보처리기사</span><span class="text-purple-600 font-bold">+10점</span></div>
+                                <div class="flex justify-between"><span>• SQLD</span><span class="text-purple-600 font-bold">+10점</span></div>
+                            </div>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center text-slate-500 font-semibold">
+                                <span>대외 활동 (가산점 총 +10점)</span>
+                            </div>
+                            <div class="text-slate-700 space-y-1 pl-2 border-l-2 border-purple-200">
+                                <div class="flex justify-between"><span>• 오픈소스 프로젝트 기여</span><span class="text-purple-600 font-bold">+10점</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedSpecStr = sessionStorage.getItem('campus_spec_data') || localStorage.getItem('campus_spec_data');
+            const savedUser = sessionStorage.getItem('campus_user_id') || localStorage.getItem('campus_user_id');
+
+            if (savedUser) {
+                const profileIdEl = document.getElementById('profileId');
+                if (profileIdEl) profileIdEl.innerText = savedUser + '학번';
+            }
+
+            if (savedSpecStr) {
+                try {
+                    const spec = JSON.parse(savedSpecStr);
+                    const gpaVal = parseFloat(spec.gpa) || 3.82;
+                    const creditsVal = parseInt(spec.credits) || 108;
+                    const maxGpa = spec.maxGpa || 4.5;
+
+                    let certBonus = 0;
+                    if (spec.cert) {
+                        const certs = spec.cert.split(/[,/]/).map(c => c.trim()).filter(c => c.length > 0);
+                        certBonus = certs.length * 10;
+                    }
+
+                    let langBonus = spec.lang ? 15 : 0;
+                    let extraBonus = spec.extra ? 10 : 0;
+
+                    const calculatedAtk = (gpaVal * 10 + (creditsVal / 5) + certBonus + langBonus + extraBonus).toFixed(1);
+                    const calculatedHp = 300 + Math.round(creditsVal * 0.8);
+
+                    document.getElementById('displayHp').innerText = calculatedHp;
+                    document.getElementById('displayAtk').innerText = calculatedAtk;
+                    document.getElementById('displayGradeGpa').innerText = `3학년 · ${gpaVal} / ${maxGpa} (이수 ${creditsVal}학점)`;
+                    document.getElementById('displayLang').innerText = spec.lang ? `${spec.lang} (환산 반영됨)` : '미입력 (기본 점수)';
+
+                    const certContainer = document.getElementById('displayCertList');
+                    if (spec.cert) {
+                        const certs = spec.cert.split(/[,/]/).map(c => c.trim()).filter(c => c.length > 0);
+                        certContainer.innerHTML = certs.map(c => `<div class="flex justify-between"><span>• ${c}</span><span class="text-blue-600 font-bold">+10점</span></div>`).join('');
+                    } else {
+                        certContainer.innerHTML = `<div class="text-slate-400">• 입력된 자격증 없음</div>`;
+                    }
+
+                    const extraContainer = document.getElementById('displayExtraList');
+                    if (spec.extra) {
+                        const extras = spec.extra.split(/[,/]/).map(e => e.trim()).filter(e => e.length > 0);
+                        extraContainer.innerHTML = extras.map(e => `<div class="flex justify-between"><span>• ${e}</span><span class="text-blue-600 font-bold">+10점</span></div>`).join('');
+                    } else {
+                        extraContainer.innerHTML = `<div class="text-slate-400">• 입력된 대외활동 없음</div>`;
+                    }
+                } catch(e) {
+                    console.error("스펙 데이터 파싱 오류:", e);
+                }
+            }
+        });
+
+        function showToast(message) {
+            const toast = document.getElementById('toastNotification');
+            const toastMsg = document.getElementById('toastMessage');
+            if (!toast || !toastMsg) return;
+            toastMsg.innerText = message;
+            toast.classList.remove('translate-y-16', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-16', 'opacity-0');
+            }, 3000);
+        }
+
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (!sidebar || !overlay) return;
+            const isOpen = !sidebar.classList.contains('-translate-x-full');
+
+            if (isOpen) {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            } else {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            }
+        }
+
+        function startBattle() {
+            const myAtk = parseFloat(document.getElementById('displayAtk').innerText) || 85.4;
+            const enemyAtk = 82.0;
+
+            if (myAtk > enemyAtk) {
+                showToast(`🎉 승리! 정우진 학생의 공격력(${myAtk})이 라이벌(${enemyAtk})을 압도했습니다!`);
+            } else {
+                showToast(`⚔️ 접전! 스펙을 더 쌓아 재도전해보세요! (내 공격력: ${myAtk})`);
+            }
+        }
+    </script>
+</body>
+</html>
