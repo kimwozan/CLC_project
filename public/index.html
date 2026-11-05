@@ -186,6 +186,55 @@
     <!-- ========================================== -->
     <!-- [모달 3] 2026 자격증 상세 시험 일정 모달 -->
     <!-- ========================================== -->
+
+    <!-- 네이버 API 설정 모달 (서버 PC에서만 저장 가능) -->
+    <div id="apiSettingsModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-black text-slate-800"><i class="fa-solid fa-key text-emerald-500 mr-1"></i> 네이버 API 설정</h3>
+                <button onclick="closeApiSettings()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p id="apiCurrentInfo" class="text-[11px] text-slate-500"></p>
+            <div class="space-y-3">
+                <label class="block text-xs font-bold text-slate-600">연동 방식
+                    <select id="apiAuthType" class="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                        <option value="ncp">NAVER API HUB (ncp)</option>
+                        <option value="developers">네이버 개발자센터 (developers)</option>
+                    </select>
+                </label>
+                <label class="block text-xs font-bold text-slate-600">API 아이디 (Client ID)
+                    <input id="apiClientId" type="text" autocomplete="off" maxlength="100" class="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                </label>
+                <label class="block text-xs font-bold text-slate-600">API 키 (Client Secret)
+                    <input id="apiClientSecret" type="password" autocomplete="new-password" maxlength="100" class="mt-1 w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                </label>
+                <p id="apiSettingsError" class="hidden text-[11px] text-rose-500 font-bold"></p>
+            </div>
+            <p class="text-[10px] text-slate-400">저장 전에 실제 호출로 키를 검증하며, 서버의 .env에 저장됩니다. 보안을 위해 서버를 실행 중인 PC에서만 수정할 수 있습니다.</p>
+            <div class="flex gap-2">
+                <button onclick="closeApiSettings()" class="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">취소</button>
+                <button id="btnSaveApi" onclick="saveApiSettings()" class="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl">검증 후 저장</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- AI 스펙 진단 챗봇 팝업 -->
+    <div id="chatbotPopup" class="fixed bottom-4 left-4 right-4 md:right-auto md:left-[17rem] md:w-96 z-[70] hidden">
+        <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden" style="height:min(32rem,calc(100vh - 2rem))">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-2 font-extrabold text-sm"><i class="fa-solid fa-robot"></i> AI 스펙 진단 챗봇</div>
+                <button onclick="toggleChatbot()" aria-label="닫기" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50 text-xs"></div>
+            <div id="chatChips" class="px-3 pt-2 pb-1 flex flex-wrap gap-1.5 border-t border-slate-100 bg-white"></div>
+            <form onsubmit="sendChat(event)" class="p-3 bg-white flex gap-2">
+                <input id="chatInput" type="text" maxlength="100" autocomplete="off" placeholder="예: 내가 부족한 부분이 뭐야?" class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-500">
+                <button type="submit" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </div>
+
     <div id="certGuideModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
         <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl space-y-5 border border-slate-200">
             <div class="flex justify-between items-start border-b border-slate-100 pb-4">
@@ -258,7 +307,7 @@
     <!-- ========================================== -->
     <!-- 좌측 사이드바 (반응형 데스크톱 고정/모바일 오버레이) -->
     <!-- ========================================== -->
-    <aside id="sidebar" class="fixed md:static inset-y-0 left-0 w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out min-h-screen shadow-xl md:shadow-none flex-shrink-0">
+    <aside id="sidebar" class="fixed md:sticky md:top-0 md:h-screen md:overflow-y-auto inset-y-0 left-0 w-64 bg-white border-r border-slate-200 p-5 flex flex-col justify-between z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out min-h-screen shadow-xl md:shadow-none flex-shrink-0">
         <div class="space-y-6">
             <!-- 로고 및 앱이름 (Desktop Only) -->
             <div class="hidden md:flex items-center gap-3">
@@ -308,6 +357,9 @@
         </div>
 
         <div class="pt-4 border-t border-slate-100 space-y-2">
+            <button onclick="toggleChatbot()" id="btnChatbot" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md transition">
+                <i class="fa-solid fa-robot"></i> AI 스펙 진단 챗봇
+            </button>
             <button onclick="openSpecModal()" class="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium text-xs text-blue-600 hover:bg-blue-50 transition">
                 <i class="fa-solid fa-sliders"></i> 스펙 정보 재설정
             </button>
@@ -505,52 +557,38 @@
                 </div>
             </div>
 
-            <!-- 기업별 합격자 & 실시간 네이버 채용 뉴스 테이블 -->
+            <!-- 채용정보 (기업·직무·언급 자격증) : 주 1회 자동 갱신 + 신뢰도 판별 -->
             <div class="card-panel rounded-3xl p-6 space-y-4">
-                <div class="flex flex-col lg:flex-row justify-between lg:items-center gap-4 border-b border-slate-100 pb-4">
+                <div class="flex flex-col lg:flex-row justify-between lg:items-center gap-3 border-b border-slate-100 pb-4">
                     <div>
                         <div class="flex items-center gap-2 mb-1">
-                            <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">네이버 뉴스</span>
+                            <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">주 1회 자동 갱신</span>
+                            <span id="jobsUpdatedText" class="text-[11px] text-slate-400 font-medium">-</span>
                             <span id="apiStatusTextMini" class="text-[11px] text-slate-400 font-medium">연결 확인 중...</span>
+                            <button id="btnApiSettings" onclick="openApiSettings()" class="hidden text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-full transition">
+                                <i class="fa-solid fa-gear"></i> API 설정
+                            </button>
                         </div>
-                        <h3 class="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
-                            📰 IT/데이터 채용 뉴스
-                        </h3>
-                        <p class="text-xs text-slate-400 mt-0.5">기사 제목·요약에서 실제로 언급된 기업과 자격증만 표시합니다. 자세한 내용은 기사 원문을 확인하세요.</p>
+                        <h3 class="text-base sm:text-lg font-black text-slate-800">💼 채용정보 · 기업 / 직무 / 기사에 언급된 자격증</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">기사에서 실제로 언급된 값만 표시합니다. 광고·낚시·출처 불명 기사는 신뢰도 판별 엔진이 자동으로 걸러냅니다.</p>
                     </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span id="successCasesCount" class="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-3 py-1 rounded-full">
-                            -
-                        </span>
+                    <div class="flex items-center gap-2">
+                        <span id="jobsFilteredBadge" class="hidden bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold px-3 py-1 rounded-full"></span>
+                        <span id="jobsCount" class="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-3 py-1 rounded-full">-</span>
                     </div>
                 </div>
-
-                <!-- 실시간 검색 및 상태 알림 바 -->
-                <div class="flex flex-col sm:flex-row gap-2 pt-1">
-                    <div class="flex-1 relative">
-                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                        <input type="text" id="liveSearchInput" maxlength="50" placeholder="뉴스 검색 (예: 삼성전자 채용, AI 개발자, 빅데이터분석기사)" class="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-blue-500" onkeydown="if(event.key==='Enter') triggerLiveSearch()">
-                    </div>
-                    <button onclick="triggerLiveSearch()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 flex-shrink-0">
-                        <i class="fa-solid fa-arrows-rotate"></i>
-                        <span>검색</span>
-                    </button>
-                </div>
-
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                                <th class="py-3 px-4">기사</th>
-                                <th class="py-3 px-4">언급 기업</th>
+                                <th class="py-3 px-4">기업</th>
+                                <th class="py-3 px-4">직무</th>
                                 <th class="py-3 px-4">언급 자격증</th>
-                                <th class="py-3 px-4">보도일</th>
+                                <th class="py-3 px-4">신뢰도</th>
+                                <th class="py-3 px-4">기사</th>
                             </tr>
                         </thead>
-                        <tbody id="successCasesBody" class="text-xs divide-y divide-slate-100">
-                            <!-- renderSuccessCases() 또는 renderLiveNewsCases()로 렌더링 -->
-                        </tbody>
+                        <tbody id="jobsBody" class="text-xs divide-y divide-slate-100"></tbody>
                     </table>
                 </div>
             </div>

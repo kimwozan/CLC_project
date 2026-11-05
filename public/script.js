@@ -235,88 +235,133 @@ function filterCerts(category, btnElement) {
     if (active) active.className = "cert-filter-btn px-4 py-2 rounded-xl text-xs font-bold transition bg-slate-800 text-white shadow-sm";
 
     renderCertCards(category === 'all' ? certData : certData.filter(c => c.tags.includes(category)));
-    fetchNews(category);
-}
-
-function setNewsMessage(html) {
-    const tbody = $('successCasesBody');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-slate-500 text-xs">${html}</td></tr>`;
+    fetchNews();
 }
 
 function setNewsStatus(ok, text) {
     const dot = $('sidebarApiDot');
     const mini = $('apiStatusTextMini');
-    if (dot) dot.className = `w-2.5 h-2.5 rounded-full ${ok ? 'bg-emerald-500' : 'bg-rose-500'}`;
+    if (dot) dot.className = `w-2.5 h-2.5 rounded-full ${ok ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`;
     if (mini) {
-        mini.innerText = text;
-        mini.className = `text-[11px] font-bold ${ok ? 'text-emerald-600' : 'text-rose-600'}`;
+        mini.className = `text-[11px] font-bold inline-flex items-center gap-1.5 ${ok ? 'text-emerald-600' : 'text-rose-600'}`;
+        if (ok) {
+            // 고정 문구만 사용 (사용자 입력 없음)
+            mini.innerHTML = '<span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span> 실시간 네이버 뉴스 연동됨';
+        } else {
+            mini.innerText = text;
+        }
     }
 }
 
-async function fetchNews(category = 'all', q = '') {
+async function fetchNews() {
+    // 채용정보 카드 하나로 통합: 연동 상태 표시 + 채용정보 로드
     if (!currentUser) return;
-    const countBadge = $('successCasesCount');
     if (!currentUser.newsEnabled) {
         setNewsStatus(false, '뉴스 API 미설정');
-        if (countBadge) countBadge.innerText = '0건';
-        setNewsMessage('채용 뉴스 기능이 아직 설정되지 않았습니다. (관리자: 서버 .env의 NAVER_CLIENT_ID/SECRET 설정 필요)');
+        fetchJobs();
         return;
     }
-    setNewsMessage('<i class="fa-solid fa-spinner fa-spin text-emerald-500 mr-1"></i> 네이버 뉴스를 불러오는 중...');
-    try {
-        const params = new URLSearchParams({ category });
-        if (q) params.set('q', q);
-        const r = await api('/api/news?' + params.toString());
-        if (!r.ok) {
-            setNewsStatus(false, `뉴스 조회 실패 (${r.data.upstreamStatus || r.status})`);
-            if (countBadge) countBadge.innerText = '0건';
-            setNewsMessage(esc(r.data.error || '뉴스를 불러오지 못했습니다.') + '<br><span class="text-slate-400">잠시 후 다시 시도하거나 관리자에게 문의하세요.</span>');
-            return;
-        }
-        setNewsStatus(true, '네이버 뉴스 연동됨');
-        if (countBadge) countBadge.innerText = `${r.data.items.length}건`;
-        renderNewsRows(r.data.items);
-    } catch (e) {
-        setNewsStatus(false, '서버 통신 오류');
-        setNewsMessage('서버와 통신할 수 없습니다.');
+    setNewsStatus(true);
+    fetchJobs();
+}
+
+// ==========================================
+// 6-1. 채용정보 (기업·직무·언급 자격증, 주 1회 갱신) + API 설정
+// ==========================================
+function fmtDateTime(sec) {
+    if (!sec) return '-';
+    const d = new Date(sec * 1000);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function fetchJobs() {
+    const body = $('jobsBody');
+    if (!body) return;
+    const r = await api('/api/jobs');
+    if (!r.ok) return;
+    const d = r.data;
+    $('jobsUpdatedText').innerText = d.updatedAt
+        ? `마지막 갱신 ${fmtDateTime(d.updatedAt)} · 다음 갱신 ${fmtDateTime(d.nextUpdateAt)}`
+        : (d.enabled ? '첫 수집 중입니다. 잠시 후 새로고침해 주세요.' : 'API 설정 후 수집됩니다.');
+    $('jobsCount').innerText = `${d.items.length}건`;
+    const fb = $('jobsFilteredBadge');
+    fb.classList.toggle('hidden', !d.filteredOut);
+    fb.innerText = `🛡️ 신뢰도 낮은 기사 ${d.filteredOut}건 자동 제외`;
+    if (!d.items.length) {
+        body.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 text-xs">표시할 채용정보가 없습니다.</td></tr>';
+        return;
     }
+    body.innerHTML = d.items.map(it => {
+        const trusted = it.verdict === 'trusted';
+        const badge = trusted
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : 'bg-amber-50 text-amber-700 border-amber-200';
+        const label = trusted ? '신뢰' : '검토 필요';
+        const certs = it.certs.map(c => `<span class="bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded font-bold text-[10px] inline-block mr-1 my-0.5">${esc(c)}</span>`).join('')
+            + (it.passer ? '<span class="text-[10px] text-indigo-500 font-bold ml-1">합격자 언급</span>' : '');
+        return `
+            <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                <td class="py-3.5 px-4 font-bold text-slate-800">${it.company ? esc(it.company) : '<span class="text-slate-300">-</span>'}</td>
+                <td class="py-3.5 px-4">${it.role ? esc(it.role) : '<span class="text-slate-300">-</span>'}</td>
+                <td class="py-3.5 px-4">${certs || '<span class="text-slate-300">-</span>'}</td>
+                <td class="py-3.5 px-4"><span title="${esc(it.reasons.join(' / '))}" class="inline-block border ${badge} px-2 py-0.5 rounded-full font-bold text-[10px] cursor-help">${label} ${it.score}</span></td>
+                <td class="py-3.5 px-4 max-w-xs"><a href="${esc(it.link)}" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:underline font-semibold">${esc(it.title)}</a><div class="text-[10px] text-slate-400 mt-0.5">${esc(it.source)} · ${esc(formatPubDate(it.pubDate))}</div></td>
+            </tr>`;
+    }).join('');
+}
+
+async function loadApiKeyStatus() {
+    const r = await api('/api/admin/naver-keys');
+    const btn = $('btnApiSettings');
+    if (btn) btn.classList.toggle('hidden', !(r.ok && r.data.canEdit));
+    return r;
+}
+
+async function openApiSettings() {
+    const r = await loadApiKeyStatus();
+    if (!r.ok || !r.data.canEdit) return showToast('서버를 실행 중인 PC에서만 수정할 수 있습니다.');
+    $('apiCurrentInfo').innerText = r.data.configured
+        ? `현재 설정됨: ${r.data.clientIdMasked} (${r.data.authType}). 키는 보안상 다시 표시되지 않습니다.`
+        : '아직 설정되지 않았습니다.';
+    $('apiAuthType').value = r.data.authType;
+    $('apiClientId').value = '';
+    $('apiClientSecret').value = '';
+    $('apiSettingsError').classList.add('hidden');
+    $('apiSettingsModal').classList.remove('hidden');
+}
+
+function closeApiSettings() {
+    $('apiSettingsModal').classList.add('hidden');
+    $('apiClientSecret').value = '';
+}
+
+async function saveApiSettings() {
+    const err = $('apiSettingsError');
+    const btn = $('btnSaveApi');
+    err.classList.add('hidden');
+    btn.disabled = true; btn.innerText = '검증 중...';
+    const r = await api('/api/admin/naver-keys', { method: 'POST', body: {
+        authType: $('apiAuthType').value,
+        clientId: $('apiClientId').value.trim(),
+        clientSecret: $('apiClientSecret').value.trim(),
+    }});
+    btn.disabled = false; btn.innerText = '검증 후 저장';
+    if (!r.ok) {
+        err.innerText = r.data.error || '저장에 실패했습니다.';
+        err.classList.remove('hidden');
+        return;
+    }
+    closeApiSettings();
+    currentUser.newsEnabled = true;
+    showToast('API 키가 저장되었습니다.');
+    fetchNews();
+    setTimeout(fetchJobs, 4000);
 }
 
 function formatPubDate(s) {
     const d = new Date(s);
     if (isNaN(d)) return '';
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function renderNewsRows(items) {
-    const tbody = $('successCasesBody');
-    if (!tbody) return;
-    if (!items || items.length === 0) return setNewsMessage('검색된 기사가 없습니다. 다른 검색어를 입력해 보세요.');
-
-    tbody.innerHTML = items.map(item => {
-        const company = item.company
-            ? `<span class="inline-flex items-center gap-1.5"><span class="w-6 h-6 rounded-lg bg-slate-200 text-slate-600 text-[10px] font-black flex items-center justify-center">${esc(item.company.slice(0, 1))}</span><span class="font-bold text-slate-800">${esc(item.company)}</span></span>`
-            : '<span class="text-slate-300">-</span>';
-        const certs = item.certs.length
-            ? item.certs.map(c => `<span class="bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded font-bold text-[10px] inline-block mr-1 my-0.5">${esc(c)}</span>`).join('')
-            : '<span class="text-slate-300">언급 없음</span>';
-        const title = item.link
-            ? `<a href="${esc(item.link)}" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:underline font-semibold">${esc(item.title)} <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i></a>`
-            : `<span class="font-semibold">${esc(item.title)}</span>`;
-        return `
-            <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
-                <td class="py-3.5 px-4 text-xs max-w-md">${title}</td>
-                <td class="py-3.5 px-4 text-xs">${company}</td>
-                <td class="py-3.5 px-4"><div class="flex flex-wrap items-center">${certs}</div></td>
-                <td class="py-3.5 px-4 text-xs text-slate-500 whitespace-nowrap">${esc(formatPubDate(item.pubDate))}</td>
-            </tr>`;
-    }).join('');
-}
-
-function triggerLiveSearch() {
-    const q = $('liveSearchInput').value.trim();
-    if (!q) return showToast('검색어를 입력해주세요.');
-    fetchNews('all', q);
 }
 
 // ==========================================
@@ -652,6 +697,160 @@ function petDuri() {
     triggerSpeech('기분 좋아! 💛');
 }
 
+
+// ==========================================
+// 11. AI 스펙 진단 챗봇 (입력된 스펙을 규칙 기반으로 분석, 외부 전송 없음)
+// ==========================================
+const CHAT_CHIPS = ['부족한 부분 분석해줘', '학점', '어학성적', '대외활동', '자격증'];
+let chatInitialized = false;
+
+function analyzeSpec(spec) {
+    const sc = computeScores(spec);
+    const hasGrades = spec.semesterGrades.some(g => g != null);
+    const langPct = spec.langType ? langScoreToPercent(spec.langType, spec.langScore) : 0;
+    const held = spec.certs.map(normalizeCert);
+    const missingCerts = certData.filter(c => {
+        const key = normalizeCert(c.name.split(' ')[0]);
+        return !held.some(h => h.includes(key) || key.includes(h));
+    }).map(c => c.name.split(' ')[0]);
+    // 입문 난이도 순으로 추천
+    const EASY_ORDER = ['SQLD', 'ADsP', '정보처리기사', '빅데이터분석기사'];
+    missingCerts.sort((a, b) => EASY_ORDER.indexOf(a) - EASY_ORDER.indexOf(b));
+    const areas = [];
+
+    // 학점
+    const gpaRatio = hasGrades ? sc.gpa / spec.maxGpa : 0;
+    if (!hasGrades) areas.push({ key: 'gpa', label: '학점', level: 0, score: 0,
+        msg: '학기별 학점이 입력되지 않았어요.', tip: '스펙 정보 재설정에서 학기별 학점을 입력하면 정확히 진단할 수 있어요.' });
+    else if (gpaRatio < 0.78) areas.push({ key: 'gpa', label: '학점', level: 0, score: sc.gpaScore,
+        msg: `평균 ${sc.gpa} / ${spec.maxGpa} 로 학점이 부족한 편이에요.`,
+        tip: '전공 필수 과목 위주로 성적을 올리고, 재수강 제도를 활용해 보세요. 남은 학기 평점 목표를 학기당 +0.2로 잡아보세요.' });
+    else if (gpaRatio < 0.89) areas.push({ key: 'gpa', label: '학점', level: 1, score: sc.gpaScore,
+        msg: `평균 ${sc.gpa} / ${spec.maxGpa} 로 무난한 수준이에요.`,
+        tip: '대기업·금융권을 노린다면 3.5(4.5 기준 약 3.9) 이상을 목표로 한 학기만 더 끌어올려 보세요.' });
+    else areas.push({ key: 'gpa', label: '학점', level: 2, score: sc.gpaScore,
+        msg: `평균 ${sc.gpa} / ${spec.maxGpa} 로 우수해요.`, tip: '지금 학점을 유지하면서 다른 영역에 시간을 쓰세요.' });
+
+    // 어학
+    if (!spec.langType) areas.push({ key: 'lang', label: '어학성적', level: 0, score: 0,
+        msg: '어학 성적이 없어요.', tip: '토익 700점 이상 또는 OPIc IM2 이상을 1차 목표로 잡고 접수부터 해보세요.' });
+    else if (langPct == null) areas.push({ key: 'lang', label: '어학성적', level: 0, score: 0,
+        msg: `${spec.langType} 점수 형식을 인식하지 못했어요.`, tip: '스펙 정보 재설정에서 점수를 다시 확인해 주세요.' });
+    else if (langPct < 71) areas.push({ key: 'lang', label: '어학성적', level: 0, score: langPct,
+        msg: `${spec.langType} ${spec.langScore} 로 기준(토익 약 700점 상당)에 못 미쳐요.`,
+        tip: '하루 1~2시간씩 8주 계획으로 단기 점수 향상을 노려보세요. 정기 시험 일정에 먼저 접수해 두면 도움이 돼요.' });
+    else if (langPct < 86) areas.push({ key: 'lang', label: '어학성적', level: 1, score: langPct,
+        msg: `${spec.langType} ${spec.langScore} 로 기본 기준은 충족했어요.`,
+        tip: '지원 기업에 따라 800점대 이상을 요구하기도 하니, 여력이 되면 한 번 더 올려보세요. OPIc/스피킹도 추가하면 좋아요.' });
+    else areas.push({ key: 'lang', label: '어학성적', level: 2, score: langPct,
+        msg: `${spec.langType} ${spec.langScore} 로 충분히 높아요.`, tip: '어학은 충분해요. 다른 영역에 집중하세요.' });
+
+    // 대외활동
+    if (sc.extraCount === 0) areas.push({ key: 'extra', label: '대외활동', level: 0, score: 0,
+        msg: '대외활동 기록이 없어요.', tip: '학술 동아리, 공모전, 해커톤, 인턴 중 한 가지를 이번 학기 안에 시작해 보세요. 직무 관련 프로젝트 경험이 가장 효과적이에요.' });
+    else if (sc.extraCount < 3) areas.push({ key: 'extra', label: '대외활동', level: 1, score: sc.extraScore,
+        msg: `대외활동 ${sc.extraCount}개로 보통 수준이에요.`,
+        tip: '직무와 직접 연결되는 활동(프로젝트·공모전·인턴)을 1개 더 추가하고, 성과를 수치로 정리해 두세요.' });
+    else areas.push({ key: 'extra', label: '대외활동', level: 2, score: sc.extraScore,
+        msg: `대외활동 ${sc.extraCount}개로 풍부해요.`, tip: '각 활동의 역할과 성과를 한 줄씩 정리해 두면 자기소개서에 바로 쓸 수 있어요.' });
+
+    // 자격증
+    const suggest = missingCerts.slice(0, 3).join(', ');
+    if (spec.certs.length === 0) areas.push({ key: 'cert', label: '자격증', level: 0, score: 0,
+        msg: '보유한 자격증이 없어요.', tip: `가장 접근하기 쉬운 ${suggest || 'SQLD, ADsP'} 부터 도전해 보세요. 자격증 추천 탭에서 시험 일정을 확인할 수 있어요.` });
+    else if (spec.certs.length < 2) areas.push({ key: 'cert', label: '자격증', level: 1, score: sc.certScore,
+        msg: `자격증 ${spec.certs.length}개(${spec.certs.join(', ')})로 보통 수준이에요.`,
+        tip: suggest ? `${suggest} 중 직무와 맞는 것을 하나 더 취득해 보세요.` : '직무 관련 자격증을 하나 더 취득해 보세요.' });
+    else areas.push({ key: 'cert', label: '자격증', level: 2, score: sc.certScore,
+        msg: `자격증 ${spec.certs.length}개(${spec.certs.join(', ')})로 충분해요.`,
+        tip: suggest ? `더 보강한다면 ${suggest} 를 고려해 보세요.` : '이미 주요 자격증을 갖추고 있어요.' });
+    return areas;
+}
+
+function chatFmt(text) {
+    return esc(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+}
+
+function chatAdd(role, html) {
+    const box = $('chatMessages');
+    const wrap = document.createElement('div');
+    wrap.className = role === 'user' ? 'flex justify-end' : 'flex justify-start';
+    const bubble = document.createElement('div');
+    bubble.className = role === 'user'
+        ? 'max-w-[85%] bg-blue-600 text-white px-3 py-2 rounded-2xl rounded-br-md'
+        : 'max-w-[90%] bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-2xl rounded-bl-md leading-relaxed';
+    bubble.innerHTML = html;
+    wrap.appendChild(bubble);
+    box.appendChild(wrap);
+    box.scrollTop = box.scrollHeight;
+}
+
+const LEVEL_ICON = ['🔴', '🟡', '🟢'];
+
+function chatReply(question) {
+    const q = question.replace(/\s/g, '').toLowerCase();
+    if (/^(안녕|하이|hi|hello)/.test(q)) return chatFmt('안녕하세요! 저는 스펙 진단 챗봇이에요. "부족한 부분 분석해줘"라고 물어보세요.');
+    if (!globalSpecData) return chatFmt('아직 스펙 정보가 없어요. 왼쪽 아래 "스펙 정보 재설정"에서 학점·어학·자격증·대외활동을 입력하면 바로 분석해 드릴게요.');
+
+    const areas = analyzeSpec(globalSpecData);
+    const pick = (key) => areas.find(a => a.key === key);
+    const one = (a) => `${LEVEL_ICON[a.level]} **${a.label}**: ${a.msg}\n👉 ${a.tip}`;
+
+    if (/학점|gpa|성적표|평점/.test(q)) return chatFmt(one(pick('gpa')));
+    if (/어학|토익|toeic|오픽|opic|텝스|teps|영어/.test(q)) return chatFmt(one(pick('lang')));
+    if (/대외|활동|동아리|공모전|인턴|경험/.test(q)) return chatFmt(one(pick('extra')));
+    if (/자격증|자격|sqld|adsp|정보처리|빅데이터/.test(q)) return chatFmt(one(pick('cert')));
+    if (/부족|약점|분석|진단|뭐|어떻|보완|노력|스펙|추천/.test(q)) {
+        const lacking = areas.filter(a => a.level === 0);
+        const mid = areas.filter(a => a.level === 1);
+        if (!lacking.length && !mid.length) return chatFmt('🎉 네 가지 영역(학점·어학·대외활동·자격증) 모두 우수해요! 지금 상태를 유지하면서 지원할 직무에 맞는 포트폴리오를 다듬어 보세요.');
+        let out = '';
+        if (lacking.length) {
+            out += `지금 가장 부족한 부분은 **${lacking.map(a => a.label).join(', ')}** 이에요. 이 부분을 채우는 데 먼저 노력해 보세요!\n\n` + lacking.map(one).join('\n\n');
+        }
+        if (mid.length) {
+            out += (out ? '\n\n' : '') + `조금만 더 보강하면 좋은 영역:\n\n` + mid.map(one).join('\n\n');
+        }
+        const good = areas.filter(a => a.level === 2).map(a => a.label);
+        if (good.length) out += `\n\n🟢 잘하고 있는 영역: ${good.join(', ')}`;
+        return chatFmt(out);
+    }
+    return chatFmt('질문을 잘 이해하지 못했어요. "부족한 부분 분석해줘"처럼 물어보거나 아래 버튼을 눌러 보세요.');
+}
+
+function sendChatText(text) {
+    const t = text.trim();
+    if (!t) return;
+    chatAdd('user', esc(t));
+    chatAdd('bot', '<span class="text-slate-400">분석 중<span class="animate-pulse">...</span></span>');
+    const last = $('chatMessages').lastChild;
+    setTimeout(() => {
+        last.remove();
+        chatAdd('bot', chatReply(t));
+    }, 450);
+}
+
+function sendChat(event) {
+    event.preventDefault();
+    const input = $('chatInput');
+    const v = input.value;
+    input.value = '';
+    sendChatText(v);
+}
+
+function toggleChatbot() {
+    const pop = $('chatbotPopup');
+    const open = pop.classList.toggle('hidden') === false;
+    if (open && !chatInitialized) {
+        chatInitialized = true;
+        $('chatChips').innerHTML = CHAT_CHIPS.map(c =>
+            `<button type="button" class="chat-chip px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-[11px] font-bold">${esc(c)}</button>`).join('');
+        $('chatChips').querySelectorAll('.chat-chip').forEach(b => b.addEventListener('click', () => sendChatText(b.innerText)));
+        chatAdd('bot', chatFmt('안녕하세요! 👋 입력해 두신 스펙을 바탕으로 **학점, 어학성적, 대외활동, 자격증** 중 부족한 부분을 분석해 드려요.\n"내가 부족한 게 뭐야?"라고 물어보세요.'));
+    }
+    if (open) $('chatInput').focus();
+}
+
 // ==========================================
 // 12. 초기화
 // ==========================================
@@ -673,6 +872,7 @@ async function bootstrap() {
     if (d.ok && d.data.pet) duriState = d.data.pet;
 
     renderAll();
+    loadApiKeyStatus();
     if (!globalSpecData) {
         openSpecModal();
         showToast('처음 오셨네요! 스펙 정보를 입력해주세요.');

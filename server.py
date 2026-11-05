@@ -124,6 +124,24 @@ def init_db():
                 updated_at INTEGER NOT NULL,
                 PRIMARY KEY (user_id, kind)
             );
+            CREATE TABLE IF NOT EXISTS job_posts (
+                link TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                company TEXT,
+                role TEXT,
+                certs TEXT NOT NULL,
+                passer INTEGER NOT NULL DEFAULT 0,
+                pub_date TEXT,
+                source TEXT,
+                score INTEGER NOT NULL,
+                verdict TEXT NOT NULL,
+                reasons TEXT NOT NULL,
+                fetched_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """
         )
 
@@ -174,6 +192,9 @@ KNOWN_COMPANIES = [
 ]
 KNOWN_CERTS = ["빅데이터분석기사", "ADsP", "ADP", "SQLD", "SQLP", "정보처리기사", "AWS",
                "AICE", "리눅스마스터", "정보보안기사"]
+# 뉴스 필터: 제목/요약에 이 중 하나라도 포함된 기사만 노출 (AI·데이터 관련 자격증)
+NEWS_FILTER_CERTS = ["빅데이터분석기사", "ADsP", "ADP", "SQLD", "SQLP", "정보처리기사", "AICE",
+                     "데이터분석 준전문가", "데이터분석준전문가"]
 CATEGORY_QUERIES = {
     "all": "IT AI 데이터 채용 자격증",
     "data": "AI 데이터 사이언티스트 빅데이터분석기사 채용",
@@ -221,6 +242,8 @@ def structure_news(items):
         text = f"{title} {desc}"
         company = next((c for c, _ in KNOWN_COMPANIES if c in text), None)
         certs = [c for c in KNOWN_CERTS if c.lower() in text.lower()]
+        if not any(c.lower() in text.lower() for c in NEWS_FILTER_CERTS):
+            continue
         link = it.get("originallink") or it.get("link") or ""
         if not link.startswith(("http://", "https://")):
             link = ""
@@ -232,6 +255,196 @@ def structure_news(items):
             "link": link,
         })
     return out
+
+
+
+# ------------------------------------------------------------------
+# 채용정보 수집 + 신뢰도 판별 (규칙 기반, 외부 AI API 불필요)
+# ------------------------------------------------------------------
+JOB_REFRESH_INTERVAL = 7 * 24 * 3600   # 일주일마다 최신화
+JOB_QUERIES = [
+    "IT 채용 합격자 자격증", "데이터 분석가 신입 채용 자격증", "개발자 신입 채용 정보처리기사",
+    "AI 엔지니어 채용 우대 자격증", "SQLD ADsP 합격 채용", "빅데이터분석기사 취득 채용",
+]
+HIRING_WORDS = ["채용", "공채", "신입", "인턴", "입사", "합격", "우대", "취업"]
+PASSER_WORDS = ["합격자", "합격생", "합격 후기", "합격한", "보유", "취득자", "취득한", "취득 후"]
+COMPANY_SUFFIX_RE = re.compile(r"([가-힣A-Za-z0-9]{2,10}(?:전자|증권|은행|카드|화재|생명|건설|제약|통신|텔레콤|그룹|랩스|테크|소프트|시스템즈|게임즈))")
+ROLE_KEYWORDS = [
+    ("데이터 사이언티스트", ["데이터 사이언티스트", "데이터사이언티스트", "데이터 과학자"]),
+    ("데이터 분석가", ["데이터 분석가", "데이터분석가", "데이터 분석", "데이터분석"]),
+    ("데이터 엔지니어", ["데이터 엔지니어", "데이터엔지니어"]),
+    ("AI/ML 엔지니어", ["AI 엔지니어", "AI엔지니어", "머신러닝", "AI 개발자", "인공지능 개발"]),
+    ("백엔드 개발자", ["백엔드"]),
+    ("프론트엔드 개발자", ["프론트엔드"]),
+    ("정보보안", ["정보보안", "보안 담당", "보안 엔지니어"]),
+    ("클라우드/인프라", ["클라우드", "인프라", "DevOps", "데브옵스"]),
+    ("소프트웨어 개발자", ["소프트웨어 개발", "SW 개발", "개발자"]),
+]
+TRUSTED_DOMAINS = {
+    "yna.co.kr", "news1.kr", "newsis.com", "chosun.com", "joongang.co.kr", "donga.com", "hani.co.kr",
+    "khan.co.kr", "hankyung.com", "mk.co.kr", "sedaily.com", "edaily.co.kr", "mt.co.kr", "fnnews.com",
+    "etnews.com", "zdnet.co.kr", "bloter.net", "kbs.co.kr", "mbc.co.kr", "imbc.com", "sbs.co.kr",
+    "ytn.co.kr", "jtbc.co.kr", "heraldcorp.com", "asiae.co.kr", "ajunews.com", "kmib.co.kr",
+    "segye.com", "munhwa.com", "hankookilbo.com", "nocutnews.co.kr", "ohmynews.com", "it.chosun.com",
+    "dt.co.kr", "inews24.com", "datanet.co.kr", "ddaily.co.kr", "digitaltoday.co.kr", "biz.chosun.com",
+}
+LOW_TRUST_DOMAINS = ("blog.naver.com", "cafe.naver.com", "tistory.com", "brunch.co.kr", "velog.io",
+                     "post.naver.com", "blog.me", "modoo.at", "youtube.com", "instagram.com")
+AD_PATTERNS = re.compile(r"(수강생\s*모집|수강료|학원|할인|이벤트|광고|협찬|보증|100%\s*합격|무조건\s*합격|합격\s*보장|환급|특가|선착순|무료\s*강의|\[AD\]|\(AD\))", re.I)
+CLICKBAIT_PATTERNS = re.compile(r"(충격|경악|난리|알고\s*보니|헉|ㄷㄷ|ㅋㅋ|소름|대박|!{2,}|\?{2,}|\.{4,}|이럴 수가)")
+
+
+def _domain(url):
+    try:
+        host = urllib.parse.urlparse(url).netloc.lower().split(":")[0]
+    except Exception:  # noqa: BLE001
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def _domain_in(host, domains):
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def assess_credibility(text, host, company, role):
+    """0~100 신뢰도 점수와 근거를 반환. 광고·낚시·개인 블로그는 낮은 점수."""
+    score, reasons = 50, []
+    if _domain_in(host, TRUSTED_DOMAINS):
+        score += 30; reasons.append("주요 언론사 출처")
+    elif any(host == d or host.endswith(d) for d in LOW_TRUST_DOMAINS):
+        score -= 25; reasons.append("개인 블로그/SNS 출처")
+    else:
+        reasons.append("검증되지 않은 출처")
+    ads = AD_PATTERNS.findall(text)
+    if ads:
+        score -= 40; reasons.append("광고·홍보성 표현: " + ", ".join(sorted({a if isinstance(a, str) else a[0] for a in ads})[:3]))
+    if CLICKBAIT_PATTERNS.search(text):
+        score -= 20; reasons.append("자극적·낚시성 표현")
+    if company:
+        score += 5; reasons.append("기업명 확인")
+    if role:
+        score += 5; reasons.append("직무 확인")
+    return score, reasons
+
+
+def extract_job_info(title, desc):
+    text = f"{title} {desc}"
+    company = next((c for c, _ in KNOWN_COMPANIES if c in text), None)
+    if not company:
+        m = COMPANY_SUFFIX_RE.search(text)
+        company = m.group(1) if m else None
+    role = next((name for name, kws in ROLE_KEYWORDS if any(k.lower() in text.lower() for k in kws)), None)
+    certs = [c for c in KNOWN_CERTS if c.lower() in text.lower()]
+    passer = any(w in text for w in PASSER_WORDS)
+    return company, role, certs, passer
+
+
+def refresh_jobs():
+    """네이버 뉴스에서 채용정보를 수집해 DB에 저장. 성공한 질의가 하나라도 있으면 True."""
+    if not (NAVER_CLIENT_ID and NAVER_CLIENT_SECRET):
+        return False
+    collected, ok_queries = {}, 0
+    for q in JOB_QUERIES:
+        res = call_naver_news(q, display=100)
+        if res["status_code"] != 200:
+            continue
+        ok_queries += 1
+        for it in res["data"].get("items", []):
+            link = it.get("originallink") or it.get("link") or ""
+            if not link.startswith(("http://", "https://")) or link in collected:
+                continue
+            title, desc = strip_tags(it.get("title")), strip_tags(it.get("description"))
+            text = f"{title} {desc}"
+            if not any(c.lower() in text.lower() for c in NEWS_FILTER_CERTS):
+                continue
+            if not any(w in text for w in HIRING_WORDS):
+                continue
+            company, role, certs, passer = extract_job_info(title, desc)
+            host = _domain(link)
+            score, reasons = assess_credibility(text, host, company, role)
+            collected[link] = {"title": title, "company": company, "role": role, "certs": certs,
+                               "passer": passer, "pub_date": it.get("pubDate", ""), "host": host,
+                               "score": score, "reasons": reasons}
+    if not ok_queries:
+        return False
+    # 교차 검증: 같은 (기업, 자격증) 조합을 서로 다른 매체 2곳 이상이 보도하면 가점
+    groups = {}
+    for v in collected.values():
+        if v["company"]:
+            for c in v["certs"]:
+                groups.setdefault((v["company"], c), set()).add(v["host"])
+    for v in collected.values():
+        if any(v["company"] and len(groups.get((v["company"], c), ())) >= 2 for c in v["certs"]):
+            v["score"] += 15; v["reasons"].append("복수 매체 교차 보도")
+    now = int(time.time())
+    with _db_lock, db() as conn:
+        conn.execute("DELETE FROM job_posts")
+        for link, v in collected.items():
+            score = max(0, min(100, v["score"]))
+            verdict = "trusted" if score >= 65 else ("review" if score >= 40 else "rejected")
+            conn.execute(
+                "INSERT INTO job_posts (link, title, company, role, certs, passer, pub_date, source, score, verdict, reasons, fetched_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (link, v["title"], v["company"], v["role"], json.dumps(v["certs"], ensure_ascii=False),
+                 1 if v["passer"] else 0, v["pub_date"], v["host"], score, verdict,
+                 json.dumps(v["reasons"], ensure_ascii=False), now))
+        conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('jobs_last_refresh', ?)", (str(now),))
+    print(f"[JOBS] 갱신 완료: {len(collected)}건 수집", flush=True)
+    return True
+
+
+_refresh_lock = threading.Lock()
+
+
+def refresh_jobs_safe():
+    if not _refresh_lock.acquire(blocking=False):
+        return False
+    try:
+        return refresh_jobs()
+    except Exception as e:  # noqa: BLE001
+        print(f"[JOBS] 갱신 실패: {e}", flush=True)
+        return False
+    finally:
+        _refresh_lock.release()
+
+
+def jobs_last_refresh():
+    with db() as conn:
+        row = conn.execute("SELECT value FROM meta WHERE key = 'jobs_last_refresh'").fetchone()
+    return int(row["value"]) if row else 0
+
+
+def job_refresher_loop():
+    """1시간마다 확인해 마지막 갱신 후 7일이 지났으면 최신화 (키 미설정 시 설정될 때까지 대기)."""
+    while True:
+        try:
+            if time.time() - jobs_last_refresh() >= JOB_REFRESH_INTERVAL:
+                refresh_jobs_safe()
+        except Exception as e:  # noqa: BLE001
+            print(f"[JOBS] {e}", flush=True)
+        time.sleep(3600)
+
+
+def save_env_values(values):
+    """.env 의 해당 키만 갱신(다른 줄 보존). 값은 호출 전에 검증되어 있어야 한다."""
+    path = os.path.join(BASE_DIR, ".env")
+    lines = []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    done = set()
+    for i, line in enumerate(lines):
+        k = line.split("=", 1)[0].strip()
+        if "=" in line and not line.lstrip().startswith("#") and k in values:
+            lines[i] = f"{k}={values[k]}"; done.add(k)
+    for k, v in values.items():
+        if k not in done:
+            lines.append(f"{k}={v}")
+    tmp = path + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, path)
 
 
 # ------------------------------------------------------------------
@@ -320,6 +533,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self.api_get_data()
             if path == "/api/news":
                 return self.api_news()
+            if path == "/api/jobs":
+                return self.api_jobs()
+            if path == "/api/admin/naver-keys":
+                return self.api_get_keys()
             return self.send_json(404, {"error": "not found"})
         if path == "/":
             self.path = "/index.html"
@@ -338,6 +555,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "/api/auth/request-code": self.api_request_code,
             "/api/auth/verify": self.api_verify,
             "/api/auth/logout": self.api_logout,
+            "/api/admin/naver-keys": self.api_set_keys,
         }
         if path in routes:
             return routes[path]()
@@ -496,7 +714,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             hit = _news_cache.get(query)
             if hit and now - hit[0] < NEWS_CACHE_TTL:
                 return self.send_json(200, hit[1])
-        res = call_naver_news(query)
+        # 필터 후 남는 기사가 충분하도록 넉넉히 가져온다
+        res = call_naver_news(query, display=100)
         if res["status_code"] != 200:
             return self.send_json(502 if res["status_code"] != 503 else 503,
                                   {"error": res.get("error"), "upstreamStatus": res["status_code"]})
@@ -504,6 +723,67 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with _news_lock:
             _news_cache[query] = (now, payload)
         return self.send_json(200, payload)
+
+    # ---- 채용정보 ----
+    def api_jobs(self):
+        if not self.current_user():
+            return self.send_json(401, {"error": "로그인이 필요합니다."})
+        with db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM job_posts WHERE verdict != 'rejected' ORDER BY score DESC, fetched_at DESC LIMIT 100").fetchall()
+            rejected = conn.execute("SELECT COUNT(*) FROM job_posts WHERE verdict = 'rejected'").fetchone()[0]
+        last = jobs_last_refresh()
+        items = [{
+            "title": r["title"], "company": r["company"], "role": r["role"],
+            "certs": json.loads(r["certs"]), "passer": bool(r["passer"]), "pubDate": r["pub_date"],
+            "source": r["source"], "score": r["score"], "verdict": r["verdict"],
+            "reasons": json.loads(r["reasons"]), "link": r["link"],
+        } for r in rows]
+        return self.send_json(200, {
+            "items": items, "filteredOut": rejected, "updatedAt": last or None,
+            "nextUpdateAt": (last + JOB_REFRESH_INTERVAL) if last else None,
+            "enabled": bool(NAVER_CLIENT_ID and NAVER_CLIENT_SECRET),
+        })
+
+    # ---- 네이버 API 키 관리 (서버를 실행 중인 PC에서 접속한 경우만 허용) ----
+    def is_local_admin(self):
+        return self.client_ip() in ("127.0.0.1", "::1", "::ffff:127.0.0.1") and not self.headers.get("X-Forwarded-For")
+
+    def api_get_keys(self):
+        if not self.current_user():
+            return self.send_json(401, {"error": "로그인이 필요합니다."})
+        cid = NAVER_CLIENT_ID
+        masked = (cid[:3] + "•" * max(0, len(cid) - 3)) if cid else ""
+        return self.send_json(200, {"canEdit": self.is_local_admin(), "configured": bool(cid and NAVER_CLIENT_SECRET),
+                                    "clientIdMasked": masked, "authType": NAVER_AUTH_TYPE})
+
+    def api_set_keys(self):
+        global NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, NAVER_AUTH_TYPE
+        if not self.current_user():
+            return self.send_json(401, {"error": "로그인이 필요합니다."})
+        if not self.is_local_admin():
+            return self.send_json(403, {"error": "API 키는 서버를 실행 중인 PC에서만 수정할 수 있습니다."})
+        body = self.read_json() or {}
+        cid = str(body.get("clientId", "")).strip()
+        csec = str(body.get("clientSecret", "")).strip()
+        atype = str(body.get("authType", NAVER_AUTH_TYPE)).strip().lower()
+        if atype not in ("ncp", "developers"):
+            return self.send_json(400, {"error": "연동 방식이 올바르지 않습니다."})
+        key_re = re.compile(r"^[A-Za-z0-9_\-]{4,100}$")
+        if not key_re.match(cid) or not key_re.match(csec):
+            return self.send_json(400, {"error": "아이디/키는 영문·숫자·_·- 4~100자로 입력해 주세요."})
+        # 저장 전에 실제로 동작하는 키인지 검증
+        prev = (NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, NAVER_AUTH_TYPE)
+        NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, NAVER_AUTH_TYPE = cid, csec, atype
+        res = call_naver_news("채용", display=1)
+        if res["status_code"] != 200:
+            NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, NAVER_AUTH_TYPE = prev
+            return self.send_json(400, {"error": "네이버 API 인증에 실패했습니다. 아이디/키/연동 방식을 확인해 주세요."})
+        save_env_values({"NAVER_CLIENT_ID": cid, "NAVER_CLIENT_SECRET": csec, "NAVER_AUTH_TYPE": atype})
+        with _news_lock:
+            _news_cache.clear()
+        threading.Thread(target=refresh_jobs_safe, daemon=True).start()
+        return self.send_json(200, {"ok": True})
 
     def log_message(self, fmt, *args):
         # 쿼리스트링은 로그에 남기지 않음
@@ -582,6 +862,7 @@ def main():
         print("⚠️  NAVER_CLIENT_ID/SECRET 미설정: 채용 뉴스 기능이 비활성화됩니다.", flush=True)
     if not SMTP_HOST:
         print("⚠️  SMTP 미설정: 인증코드가 메일 대신 이 콘솔에 출력됩니다 (개발 모드).", flush=True)
+    threading.Thread(target=job_refresher_loop, daemon=True).start()
     http.server.ThreadingHTTPServer.allow_reuse_address = True
     httpd = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"🚀 캠퍼스 스펙 트래커: http://{'localhost' if HOST in ('127.0.0.1', '0.0.0.0') else HOST}:{PORT}", flush=True)
