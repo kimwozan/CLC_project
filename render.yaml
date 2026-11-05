@@ -17,9 +17,9 @@ services:
         value: "1"
       - key: TRUST_PROXY
         value: "1"
-      # Vercel 배포 주소로 바꿔 주세요 (예: https://clc.vercel.app). 쉼표로 여러 개 가능
+      # Vercel 배포 주소 (쉼표로 여러 개 가능)
       - key: ALLOWED_ORIGINS
-        value: https://YOUR-APP.vercel.app
+        value: https://clcproject.vercel.app
       # 네이버 API 키는 값을 직접 입력 (코드/저장소에 넣지 않습니다)
       - key: NAVER_AUTH_TYPE
         value: ncp

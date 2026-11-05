@@ -1,12 +1,12 @@
-# Vercel에는 화면(public/)만 올립니다. 비밀값·DB·서버 코드·원본 이미지는 업로드하지 않습니다.
-.env
-.env.*
-data/
-server.py
-*.md
-.claude/
-.git/
-duri.png
-duri1.png
-Map.png
-render.yaml
+# Vercel에는 화면(public/)만 올립니다. 비밀값·DB·서버 코드·루트의 원본 이미지는 업로드하지 않습니다.
+# 앞의 / 는 "저장소 최상위"만 뜻합니다 (public/ 안의 같은 이름 파일은 올라갑니다).
+/.env
+/.env.*
+/data/
+/server.py
+/*.md
+/.claude/
+/duri.png
+/duri1.png
+/Map.png
+/render.yaml
