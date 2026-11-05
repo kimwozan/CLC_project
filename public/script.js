@@ -19,7 +19,8 @@ const VALID_CERTIFICATES = [
     "전기기사", "전자기사", "무선설비기사", "통신기사",
     "한국사능력검정시험", "한국사1급", "한국사2급", "한국사3급",
     "GTQ", "GTQi", "전산회계1급", "전산회계2급", "전산세무1급", "전산세무2급",
-    "PMP", "CISA", "CISSP", "MOS"
+    "PMP", "CISA", "CISSP", "MOS",
+    "운전면허", "운전면허1종", "운전면허2종"
 ];
 
 // ==========================================
@@ -141,7 +142,7 @@ function toggleMobileSidebar() {
 }
 
 function switchTab(tabName) {
-    ['dashboard', 'duri', 'recommand'].forEach(name => {
+    ['dashboard', 'duri', 'recommand', 'grades'].forEach(name => {
         const tabEl = $('tab-' + name);
         const navEl = $('nav-' + name);
         if (tabEl) tabEl.classList.add('hidden');
@@ -156,9 +157,14 @@ function switchTab(tabName) {
     if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) toggleMobileSidebar();
 
     if (tabName === 'dashboard') {
-        setTimeout(() => [radarChartInstance, lineChartInstance, gaugeChartInstance].forEach(c => c && c.resize()), 50);
+        setTimeout(() => {
+            [lineChartInstance, gaugeChartInstance].forEach(c => c && c.resize());
+            playRadarAnimation();
+        }, 50);
     } else if (tabName === 'recommand') {
         filterCerts(currentCertCategory);
+    } else if (tabName === 'grades') {
+        renderGradesTab();
     }
 }
 
@@ -274,24 +280,95 @@ function fmtDateTime(sec) {
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// ---- AI 채용정보 인사이트: 키워드 필터 + 10개씩 페이지 ----
+const JOBS_PER_PAGE = 10;
+let jobsAll = [];       // 서버에서 받은 전체 기사
+let jobsQuery = '';
+let jobsPage = 1;
+let jobsMeta = null;    // { enabled, updatedAt, filteredOut }
+
 async function fetchJobs() {
-    const body = $('jobsBody');
-    if (!body) return;
+    if (!$('jobsBody')) return;
     const r = await api('/api/jobs');
     if (!r.ok) return;
     const d = r.data;
+    jobsAll = d.items || [];
+    jobsMeta = d;
     $('jobsUpdatedText').innerText = d.updatedAt
         ? `마지막 갱신 ${fmtDateTime(d.updatedAt)} · 다음 갱신 ${fmtDateTime(d.nextUpdateAt)}`
         : (d.enabled ? '첫 수집 중입니다. 잠시 후 새로고침해 주세요.' : 'API 설정 후 수집됩니다.');
-    $('jobsCount').innerText = `${d.items.length}건`;
     const fb = $('jobsFilteredBadge');
     fb.classList.toggle('hidden', !d.filteredOut);
     fb.innerText = `🛡️ 신뢰도 낮은 기사 ${d.filteredOut}건 자동 제외`;
-    if (!d.items.length) {
-        body.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 text-xs">표시할 채용정보가 없습니다.</td></tr>';
+    renderJobs();
+}
+
+function jobsFiltered() {
+    const terms = jobsQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return jobsAll;
+    // 공백으로 나눈 모든 키워드가 (제목·기업·직무·자격증·출처) 어딘가에 있어야 통과
+    return jobsAll.filter(it => {
+        const hay = [it.title, it.company, it.role, it.source, (it.certs || []).join(' ')].join(' ').toLowerCase();
+        return terms.every(t => hay.includes(t));
+    });
+}
+
+function jobsSearchInput(value) {
+    jobsQuery = String(value || '').trim();
+    jobsPage = 1;
+    $('jobsSearchClear').classList.toggle('hidden', !value);
+    renderJobs();
+}
+
+function jobsSearchClear() {
+    const input = $('jobsSearch');
+    input.value = '';
+    jobsSearchInput('');
+    input.focus();
+}
+
+function jobsGoto(page) {
+    jobsPage = page;
+    renderJobs();
+    const top = $('jobsSearch');
+    if (top) top.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function jobsPagerHtml(total) {
+    if (total <= 1) return '';
+    const btn = (label, page, { active = false, disabled = false, aria = '' } = {}) => disabled
+        ? `<span class="min-w-[2rem] h-8 px-2 inline-flex items-center justify-center rounded-lg text-xs font-bold text-slate-300">${label}</span>`
+        : `<button type="button" onclick="jobsGoto(${page})" ${aria ? `aria-label="${aria}"` : ''} ${active ? 'aria-current="page"' : ''} class="min-w-[2rem] h-8 px-2 inline-flex items-center justify-center rounded-lg text-xs font-bold transition ${active ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${label}</button>`;
+    // 많을 때는 1 … 현재±2 … 마지막 으로 줄임
+    const pages = [];
+    for (let p = 1; p <= total; p++) {
+        if (p === 1 || p === total || Math.abs(p - jobsPage) <= 2) pages.push(p);
+        else if (pages[pages.length - 1] !== '…') pages.push('…');
+    }
+    return btn('<i class="fa-solid fa-chevron-left text-[10px]"></i>', jobsPage - 1, { disabled: jobsPage === 1, aria: '이전 페이지' })
+        + pages.map(p => p === '…' ? '<span class="px-1 text-slate-400 text-xs">…</span>' : btn(p, p, { active: p === jobsPage, aria: `${p}페이지` })).join('')
+        + btn('<i class="fa-solid fa-chevron-right text-[10px]"></i>', jobsPage + 1, { disabled: jobsPage === total, aria: '다음 페이지' });
+}
+
+function renderJobs() {
+    const body = $('jobsBody');
+    const list = jobsFiltered();
+    const totalPages = Math.max(1, Math.ceil(list.length / JOBS_PER_PAGE));
+    jobsPage = Math.min(Math.max(1, jobsPage), totalPages);
+    const start = (jobsPage - 1) * JOBS_PER_PAGE;
+    const pageItems = list.slice(start, start + JOBS_PER_PAGE);
+
+    $('jobsCount').innerText = jobsQuery
+        ? `${list.length}건 / 전체 ${jobsAll.length}건`
+        : `${list.length}건`;
+    $('jobsPager').innerHTML = jobsPagerHtml(totalPages);
+
+    if (!pageItems.length) {
+        body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500 text-xs">${
+            jobsQuery ? `'${esc(jobsQuery)}'에 해당하는 채용정보가 없습니다. 다른 키워드로 검색해 보세요.` : '표시할 채용정보가 없습니다.'}</td></tr>`;
         return;
     }
-    body.innerHTML = d.items.map(it => {
+    body.innerHTML = pageItems.map(it => {
         const trusted = it.verdict === 'trusted';
         const badge = trusted
             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -595,11 +672,15 @@ function initChartsWithData() {
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            animation: { duration: 1400, easing: 'easeOutBack' },
             scales: { r: { min: 0, max: 100, ticks: { display: false }, angleLines: { color: '#e2e8f0' }, grid: { color: '#cbd5e1' },
                 pointLabels: { color: '#334155', font: { size: 11, weight: 'bold' } } } },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } }
         }
     });
+    // 펼침 애니메이션의 목표값 (중심(0)에서 이 값까지 쫙 펴진다)
+    radarChartInstance._targets = radarChartInstance.data.datasets.map(ds => ds.data.slice());
+    playRadarAnimation();
 
     if (lineChartInstance) lineChartInstance.destroy();
     lineChartInstance = new Chart($('gpaLineChart').getContext('2d'), {
@@ -622,6 +703,21 @@ function initChartsWithData() {
     });
 }
 
+// 오각형이 중심에서 바깥으로 쫙 펴지는 애니메이션 (대시보드가 보일 때만 재생)
+function playRadarAnimation() {
+    const c = radarChartInstance;
+    if (!c || !c._targets || !c.canvas || c.canvas.offsetWidth === 0) return;   // 숨겨진 탭이면 탭을 열 때 재생
+    c.resize();
+    c.data.datasets.forEach((ds, i) => { ds.data = c._targets[i].map(() => 0); });
+    c.update('none');                                   // 중심점에 모은 상태로 시작
+    clearTimeout(playRadarAnimation._t);
+    playRadarAnimation._t = setTimeout(() => {          // 한 프레임 쉬고(rAF는 숨겨진 탭에서 멈추므로 타이머 사용) 펼치기
+        if (c !== radarChartInstance) return;           // 그 사이 차트가 다시 만들어졌으면 중단
+        c.data.datasets.forEach((ds, i) => { ds.data = c._targets[i].slice(); });
+        c.update();                                     // 목표값까지 펼치기
+    }, 40);
+}
+
 function updateRadarChart(val) {
     if (!radarChartInstance) return;
     const presets = {
@@ -630,6 +726,7 @@ function updateRadarChart(val) {
         backend: { data: [75, 85, 70, 60, 75], label: '목표 기준선 (SW 백엔드)' }
     };
     const p = presets[val] || presets.default;
+    radarChartInstance._targets[1] = p.data.slice();
     radarChartInstance.data.datasets[1].data = p.data;
     radarChartInstance.data.datasets[1].label = p.label;
     radarChartInstance.update();
@@ -697,6 +794,193 @@ function petDuri() {
     triggerSpeech('기분 좋아! 💛');
 }
 
+
+
+// ==========================================
+// 10-1. 성적관리 탭 (추가/변경을 한 화면에서, 저장 시 서버 반영)
+// ==========================================
+let gradesDraft = null;
+let gradesSnapshot = '';
+const SEM_LABELS = ['1학년 1학기', '1학년 2학기', '2학년 1학기', '2학년 2학기', '3학년 1학기', '3학년 2학기', '4학년 1학기', '4학년 2학기'];
+
+function cloneSpec(s) {
+    const c = JSON.parse(JSON.stringify({ ...EMPTY_SPEC, ...(s || {}) }));
+    c.semesterGrades = (c.semesterGrades || []).concat(Array(8).fill(null)).slice(0, 8);
+    c.certs = Array.isArray(c.certs) ? c.certs : [];
+    return c;
+}
+
+function gradesExtras() {
+    return (gradesDraft.extra || '').split(/[,/]/).map(e => e.trim()).filter(Boolean);
+}
+
+function renderGradesTab() {
+    gradesDraft = cloneSpec(globalSpecData);
+    gradesSnapshot = JSON.stringify(gradesDraft);
+    $('gSemesters').innerHTML = SEM_LABELS.map((label, i) => `
+        <div>
+            <label for="gSem${i}" class="block text-[10px] font-semibold text-slate-600 mb-0.5">${label}</label>
+            <input type="number" step="0.01" min="0" id="gSem${i}" oninput="gradesSemester(${i}, this.value)" class="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-blue-500">
+        </div>`).join('');
+    $('gCertList').innerHTML = VALID_CERTIFICATES.map(c => `<option value="${esc(c)}"></option>`).join('');
+    paintGradesInputs();
+}
+
+function paintGradesInputs() {
+    const d = gradesDraft;
+    $('gName').value = d.name || '';
+    $('gMajor').value = d.major || '';
+    $('gMaxGpa').value = String(d.maxGpa || 4.5);
+    d.semesterGrades.forEach((g, i) => { const el = $('gSem' + i); el.value = g == null ? '' : g; el.max = d.maxGpa; });
+    $('gCredits').value = d.credits || '';
+    $('gTotalCredits').value = d.totalCredits || 130;
+    $('gLangType').value = d.langType || '';
+    $('gLangScore').value = d.langScore || '';
+    paintGradesChips();
+    updateGradesSummary();
+}
+
+function chipHtml(text, onRemove, color) {
+    return `<span class="inline-flex items-center gap-1.5 ${color} border px-2.5 py-1 rounded-full text-[11px] font-bold">${esc(text)}<button type="button" onclick="${onRemove}" aria-label="${esc(text)} 삭제" class="opacity-60 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button></span>`;
+}
+
+function paintGradesChips() {
+    const certs = gradesDraft.certs;
+    $('gCertChips').innerHTML = certs.length
+        ? certs.map((c, i) => chipHtml(c, `gradesRemoveCert(${i})`, 'bg-purple-50 text-purple-700 border-purple-200')).join('')
+        : '<span class="text-[11px] text-slate-400">등록된 자격증이 없습니다.</span>';
+    const extras = gradesExtras();
+    $('gExtraChips').innerHTML = extras.length
+        ? extras.map((e, i) => chipHtml(e, `gradesRemoveExtra(${i})`, 'bg-amber-50 text-amber-700 border-amber-200')).join('')
+        : '<span class="text-[11px] text-slate-400">등록된 활동이 없습니다.</span>';
+}
+
+function gradesAvg() {
+    const v = gradesDraft.semesterGrades.filter(g => g != null && !isNaN(g));
+    return v.length ? +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2) : 0;
+}
+
+function updateGradesSummary() {
+    const d = gradesDraft;
+    const gpa = gradesAvg();
+    const st = calcStats({ gpa, credits: d.credits, langScore: d.langType ? d.langScore : '', certs: d.certs });
+    $('gSumGpa').innerText = gpa ? `${gpa.toFixed(2)} / ${d.maxGpa}` : '-';
+    $('gSumHp').innerText = st.hp;
+    $('gSumAtk').innerText = fmtNum(st.atk);
+    const pct = Math.min(100, Math.round((Number(d.credits) || 0) / (Number(d.totalCredits) || 130) * 100));
+    $('gCreditsPct').innerText = `${Number(d.credits) || 0} / ${Number(d.totalCredits) || 130}학점 (${pct}%)`;
+    $('gCreditsBar').style.width = pct + '%';
+    const dirty = JSON.stringify(d) !== gradesSnapshot;
+    $('gSaveBtn').disabled = !dirty;
+    $('gResetBtn').disabled = !dirty;
+    $('gDirtyText').innerText = dirty ? '● 저장되지 않은 변경사항이 있어요' : '변경사항 없음';
+    $('gDirtyText').className = `text-xs font-bold ${dirty ? 'text-amber-600' : 'text-slate-400'}`;
+}
+
+function gradesField(key, value) {
+    if (key === 'credits') gradesDraft.credits = Math.max(0, parseInt(value, 10) || 0);
+    else if (key === 'totalCredits') gradesDraft.totalCredits = Math.max(1, parseInt(value, 10) || 130);
+    else if (key === 'langType') { gradesDraft.langType = value; if (!value) { gradesDraft.langScore = ''; $('gLangScore').value = ''; } }
+    else gradesDraft[key] = String(value);
+    updateGradesSummary();
+}
+
+function gradesSemester(i, raw) {
+    const v = String(raw).trim();
+    gradesDraft.semesterGrades[i] = v === '' ? null : parseFloat(v);
+    updateGradesSummary();
+}
+
+function gradesMaxGpa(val) {
+    gradesDraft.maxGpa = parseFloat(val) || 4.5;
+    gradesDraft.semesterGrades.forEach((g, i) => { $('gSem' + i).max = gradesDraft.maxGpa; });
+    updateGradesSummary();
+}
+
+function gradesAddCert() {
+    const input = $('gCertInput');
+    const raw = input.value.trim();
+    if (!raw) return;
+    const canon = VALID_CERTIFICATES.find(v => normalizeCert(v) === normalizeCert(raw));
+    if (!canon) return showToast(`'${raw}'은(는) 목록에 없는 자격증입니다. 정확한 명칭으로 입력해 주세요.`);
+    if (gradesDraft.certs.some(c => normalizeCert(c) === normalizeCert(canon))) return showToast('이미 추가한 자격증입니다.');
+    if (gradesDraft.certs.length >= 20) return showToast('자격증은 최대 20개까지 추가할 수 있습니다.');
+    gradesDraft.certs.push(canon);
+    input.value = '';
+    paintGradesChips();
+    updateGradesSummary();
+}
+
+function gradesRemoveCert(i) {
+    gradesDraft.certs.splice(i, 1);
+    paintGradesChips();
+    updateGradesSummary();
+}
+
+function gradesAddExtra() {
+    const input = $('gExtraInput');
+    const text = input.value.replace(/[,/]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text) return;
+    const list = gradesExtras();
+    if (list.includes(text)) return showToast('이미 추가한 활동입니다.');
+    const next = list.concat(text).join(', ');
+    if (next.length > 300) return showToast('대외활동은 전체 300자까지 입력할 수 있습니다.');
+    gradesDraft.extra = next;
+    input.value = '';
+    paintGradesChips();
+    updateGradesSummary();
+}
+
+function gradesRemoveExtra(i) {
+    const list = gradesExtras();
+    list.splice(i, 1);
+    gradesDraft.extra = list.join(', ');
+    paintGradesChips();
+    updateGradesSummary();
+}
+
+function gradesReset() {
+    gradesDraft = JSON.parse(gradesSnapshot);
+    paintGradesInputs();
+    showToast('변경사항을 되돌렸습니다.');
+}
+
+async function gradesSave() {
+    const d = gradesDraft;
+    const maxGpa = d.maxGpa || 4.5;
+    for (let i = 0; i < 8; i++) {
+        const g = d.semesterGrades[i];
+        if (g != null && (isNaN(g) || g < 0 || g > maxGpa)) {
+            showToast(`${SEM_LABELS[i]} 학점은 0 ~ ${maxGpa} 사이로 입력해주세요.`);
+            $('gSem' + i).focus();
+            return;
+        }
+    }
+    if (d.semesterGrades.every(g => g == null)) return showToast('최소 1개 학기의 평점을 입력해주세요.');
+    if (d.langType && langScoreToPercent(d.langType, d.langScore) == null) {
+        showToast('어학 점수 형식을 확인해주세요. (예: TOEIC 850 / OPIc IH)');
+        $('gLangScore').focus();
+        return;
+    }
+    const spec = {
+        name: (d.name || '').trim(), major: (d.major || '').trim(), maxGpa,
+        semesterGrades: d.semesterGrades,
+        credits: d.credits || 0, totalCredits: d.totalCredits || 130,
+        langType: d.langType || '', langScore: d.langType ? String(d.langScore || '').trim() : '',
+        certs: d.certs, extra: d.extra || ''
+    };
+    $('gSaveBtn').disabled = true;
+    const r = await api('/api/data', { method: 'PUT', body: { spec } });
+    if (!r.ok) { updateGradesSummary(); return showToast(r.data.error || '저장에 실패했습니다.'); }
+    globalSpecData = spec;
+    gradesDraft = cloneSpec(spec);
+    gradesSnapshot = JSON.stringify(gradesDraft);
+    renderProfile();
+    initChartsWithData();
+    renderRecommendations();
+    updateGradesSummary();
+    showToast('성적 정보가 저장되었습니다. 곰두리 스탯에도 반영돼요!');
+}
 
 // ==========================================
 // 11. AI 스펙 진단 챗봇 (입력된 스펙을 규칙 기반으로 분석, 외부 전송 없음)
@@ -878,6 +1162,7 @@ async function bootstrap() {
         showToast('처음 오셨네요! 스펙 정보를 입력해주세요.');
     }
     if (location.hash === '#recommand') switchTab('recommand');
+    if (location.hash === '#grades') switchTab('grades');
 }
 
 window.addEventListener('DOMContentLoaded', bootstrap);

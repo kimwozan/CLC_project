@@ -11,6 +11,38 @@
     <!-- Custom Styles -->
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐻</text></svg>">
+    <style>
+        @keyframes duriReady { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-5px) rotate(-1.5deg); } }
+        .duri-ready { animation: duriReady 1.1s ease-in-out infinite; transform-origin: 50% 100%; }
+        .duri-ready.delay { animation-delay: .55s; }
+        /* ---- 스펙 배틀 전장 ---- */
+        #battleOverlay { background: rgba(15,23,42,0); backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); transition: background .7s ease, backdrop-filter .7s ease, -webkit-backdrop-filter .7s ease; }
+        #battleOverlay.on { background: rgba(15,23,42,.45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        #battleStage { opacity: 0; transform: scale(.94); transition: opacity .6s ease .15s, transform .6s ease .15s; }
+        #battleOverlay.on #battleStage { opacity: 1; transform: scale(1); }
+        #battleOverlay.leaving #battleStage { opacity: 0; transform: scale(.97); transition: opacity .35s ease, transform .35s ease; }
+        .bf-fighter { position: absolute; bottom: 3%; height: 58%; }
+        .bf-me { left: 11%; } .bf-en { right: 11%; }
+        .bf-body { height: 100%; transform-origin: 50% 100%; transition: transform .6s ease, opacity .6s ease; }
+        .bf-body img { height: 100%; width: auto; max-width: none; display: block; filter: drop-shadow(0 6px 4px rgba(0,0,0,.25)); }
+        .bf-me .bf-body img { transform: scaleX(-1); }
+        .bf-me .bf-body.ko { transform: rotate(-78deg) translateY(10%); opacity: .55; }
+        .bf-en .bf-body.ko { transform: rotate(78deg) translateY(10%); opacity: .55; }
+        @keyframes bfLungeR { 0% { transform: translateX(0); } 38% { transform: translateX(var(--dx)); } 100% { transform: translateX(0); } }
+        @keyframes bfLungeL { 0% { transform: translateX(0); } 38% { transform: translateX(calc(var(--dx) * -1)); } 100% { transform: translateX(0); } }
+        .bf-me.lunge { animation: bfLungeR .55s ease-in-out; }
+        .bf-en.lunge { animation: bfLungeL .55s ease-in-out; }
+        @keyframes bfHit { 0%,100% { filter: none; } 40% { filter: brightness(1.8) saturate(.4); } }
+        .bf-body.hit img { animation: bfHit .3s ease; }
+        @keyframes bfFloat { 0% { opacity: 0; transform: translateY(8px) scale(.8); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 100% { opacity: 0; transform: translateY(-46px) scale(1); } }
+        .bf-dmg { position: absolute; font-weight: 900; font-size: 1.5rem; color: #ef4444; text-shadow: 0 2px 0 #fff, 0 0 8px #fff; pointer-events: none; animation: bfFloat 1s ease-out forwards; }
+        @keyframes bfFlash { 0%,100% { opacity: 0; } 30% { opacity: .55; } }
+        .bf-flash { position: absolute; inset: 0; background: #fff; pointer-events: none; opacity: 0; }
+        .bf-flash.go { animation: bfFlash .25s ease; }
+        @keyframes bfShake { 0%,100% { transform: translate(0,0); } 25% { transform: translate(-4px,2px); } 50% { transform: translate(4px,-2px); } 75% { transform: translate(-3px,-2px); } }
+        .bf-shake { animation: bfShake .25s linear; }
+        @media (prefers-reduced-motion: reduce) { .duri-ready { animation: none; } }
+    </style>
 </head>
 <body class="min-h-screen bg-slate-100 flex flex-col md:flex-row relative overflow-x-hidden text-slate-800">
 
@@ -21,8 +53,8 @@
                 <i class="fa-solid fa-graduation-cap"></i>
             </div>
             <div>
-                <h1 class="font-bold text-slate-800 leading-tight text-sm">캠퍼스 스펙</h1>
-                <p class="text-[10px] text-slate-400 font-semibold tracking-wider">RPG BATTLE</p>
+                <h1 class="font-bold text-slate-800 leading-tight text-sm">CLC</h1>
+                <p class="text-[10px] text-slate-400 font-semibold tracking-wider">CAMPUS LIFE CONNECT</p>
             </div>
         </div>
         <button id="mobileMenuBtn" onclick="toggleMobileSidebar()" class="p-2 text-slate-600 hover:text-slate-900 focus:outline-none rounded-lg hover:bg-slate-100">
@@ -42,8 +74,8 @@
                     <i class="fa-solid fa-graduation-cap"></i>
                 </div>
                 <div>
-                    <h1 class="font-black text-slate-800 leading-tight">캠퍼스 스펙</h1>
-                    <p class="text-[11px] text-slate-400 font-bold tracking-wider">RPG BATTLE MODE</p>
+                    <h1 class="font-black text-slate-800 leading-tight">CLC</h1>
+                    <p class="text-[11px] text-slate-400 font-bold tracking-wider">CAMPUS LIFE CONNECT</p>
                 </div>
             </div>
 
@@ -66,11 +98,14 @@
                 <a href="index.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50">
                     <i class="fa-solid fa-chart-line text-base text-blue-500"></i> 대시보드 (역량 분석)
                 </a>
-                <a href="pet.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition bg-blue-50 text-blue-600">
-                    <i class="fa-solid fa-gamepad text-base text-cyan-500"></i> RPG 배틀 모드
-                </a>
                 <a href="index.html#recommand" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50">
                     <i class="fa-solid fa-certificate text-base text-purple-500"></i> 자격증 추천
+                </a>
+                <a href="pet.html" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-sm transition bg-blue-50 text-blue-600">
+                    <i class="fa-solid fa-gamepad text-base text-cyan-500"></i> 곰두리 키우기
+                </a>
+                <a href="index.html#grades" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition text-slate-600 hover:bg-slate-50">
+                    <i class="fa-solid fa-pen-to-square text-base text-emerald-500"></i> 성적관리
                 </a>
                 
             </nav>
@@ -84,7 +119,7 @@
     </aside>
 
     <!-- 메인 컨텐츠 영역 -->
-    <main class="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full space-y-6">
+    <main class="flex-1 p-4 sm:p-6 lg:p-4 overflow-y-auto lg:overflow-hidden lg:h-screen lg:flex lg:flex-col max-w-7xl mx-auto w-full space-y-4 lg:space-y-3">
         <!-- Notification Toast Box -->
         <div id="toastNotification" class="fixed bottom-5 right-5 z-[999] bg-slate-900/95 backdrop-blur text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-2xl transform translate-y-16 opacity-0 transition-all duration-300 flex items-center gap-2 border border-slate-700">
             <i class="fa-solid fa-circle-info text-cyan-400"></i>
@@ -92,29 +127,28 @@
         </div>
 
         <!-- 상단 헤더 -->
-        <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+        <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 lg:p-3 lg:px-5 rounded-3xl border border-slate-200 shadow-xs">
             <div>
                 <span class="bg-cyan-50 border border-cyan-200 text-cyan-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 w-max mb-1">
                     <span class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
                     스펙 게이미피케이션 RPG
                 </span>
-                <h2 class="text-xl sm:text-2xl font-black text-slate-800">
+                <h2 class="text-xl sm:text-2xl lg:text-lg font-black text-slate-800">
                     🎮 곰두리 스펙 배틀 아레나
                 </h2>
-                <p class="text-xs text-slate-500 mt-0.5">내 스펙(학점, 어학, 자격증, 대외활동)이 공격력(ATK)과 체력(HP)으로 실시간 환산됩니다.</p>
             </div>
             <a href="index.html" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-2 w-max">
                 <i class="fa-solid fa-chart-pie"></i> 역량 대시보드
             </a>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-3 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
             
             <!-- 왼쪽: 내 스펙 카드 영역 (lg:col-span-5) -->
-            <div class="lg:col-span-5 space-y-4">
-                <div class="card-panel rounded-3xl p-6 flex flex-col justify-between">
+            <div class="lg:col-span-5 space-y-4 lg:space-y-3 lg:min-h-0 lg:flex lg:flex-col">
+                <div class="card-panel rounded-3xl p-6 lg:p-4 flex flex-col justify-between">
                     <div>
-                        <div class="mb-4">
+                        <div class="mb-4 lg:mb-2">
                             <div class="flex items-center justify-between font-bold text-xs mb-1 text-rose-500">
                                 <span><i class="fa-solid fa-heart text-rose-500"></i> 내 체력 (HP)</span>
                                 <span class="text-slate-700 font-extrabold"><span id="displayHp">-</span></span>
@@ -123,11 +157,13 @@
                                 <div class="bg-gradient-to-r from-rose-500 to-red-400 h-full rounded-full w-full"></div>
                             </div>
                         </div>
-                        <div class="my-6 flex items-center justify-center relative p-4">
+                        <div class="my-6 lg:my-2 flex items-center justify-center relative p-4 lg:p-2">
                             <div class="absolute inset-0 bg-cyan-500/10 rounded-full blur-2xl"></div>
-                            <!-- 곰두리 아바타 -->
-                            <div class="w-36 h-36 rounded-3xl bg-gradient-to-tr from-cyan-400 to-blue-500 flex items-center justify-center text-7xl shadow-xl transform hover:scale-105 transition cursor-pointer select-none">
-                                🐻‍❄️
+                            <!-- 곰두리 (이미지가 왼쪽을 향하므로 좌우 반전해 오른쪽의 상대를 바라보게 배치) -->
+                            <div class="w-32 h-36 lg:w-32 lg:h-36 rounded-3xl bg-white border border-slate-200 flex items-end justify-center shadow-xl transform hover:scale-105 transition select-none overflow-hidden" role="img" aria-label="전투 준비 중인 곰두리">
+                                <div class="duri-ready h-full flex items-end justify-center">
+                                    <img src="duri1.png" alt="" draggable="false" class="h-full w-auto max-w-none" style="transform:scaleX(-1)">
+                                </div>
                             </div>
                         </div>
                         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 text-center">
@@ -138,51 +174,42 @@
                 </div>
 
                 <!-- 내 스펙 상세 정보 박스 -->
-                <div class="card-panel rounded-3xl p-5 space-y-3">
+                <div class="card-panel rounded-3xl p-5 lg:p-3 space-y-3 lg:space-y-2 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
                     <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-500"></i> 내 스펙 상세 스탯</h3>
-                    <div class="space-y-2 text-xs">
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                    <div class="space-y-2 lg:space-y-1.5 text-xs lg:text-[11px]">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
                             <span class="text-slate-500 font-medium">학년도 / 평점</span>
                             <strong class="text-slate-800"><span id="displayGradeGpa">-</span></strong>
                         </div>
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
                             <span class="text-slate-500 font-medium">어학 점수</span>
                             <strong class="text-slate-800"><span id="displayLang">-</span></strong>
                         </div>
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
                             <div class="flex justify-between items-center text-slate-500 font-semibold">
-                                <span>보유 자격증 (가산점 산출)</span>
+                                <span>보유 자격증 (자격증 점수)</span>
                             </div>
                             <div id="displayCertList" class="text-slate-700 space-y-1 pl-2 border-l-2 border-blue-200"></div>
-                            </div>
                         </div>
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
                             <div class="flex justify-between items-center text-slate-500 font-semibold">
-                                <span>대외 활동 (가산점 산출)</span>
+                                <span>대외 활동</span>
                             </div>
                             <div id="displayExtraList" class="text-slate-700 space-y-1 pl-2 border-l-2 border-blue-200"></div>
-                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- 중앙: 전투 및 상호작용 액션 영역 (lg:col-span-2) -->
-            <div class="lg:col-span-2 flex flex-col justify-center items-center gap-4 py-8">
-                <!-- 1. 스펙 추가/수정 바로가기 -->
-                <a href="index.html" class="w-full py-5 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 text-white shadow-md bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 transition transform hover:-translate-y-0.5 text-center">
+            <div class="lg:col-span-2 flex flex-col justify-center items-center gap-4 py-8 lg:py-2">
+                <!-- 1. 곰두리 강화하기 (성적관리 탭으로 이동) -->
+                <a href="index.html#grades" class="w-full py-5 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 text-white shadow-md bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 transition transform hover:-translate-y-0.5 text-center">
                     <span class="text-[10px] bg-white/25 px-2 py-0.5 rounded-full font-bold">LIVE</span>
                     <i class="fa-solid fa-plus-circle text-2xl"></i>
-                    <span class="text-xs font-bold text-blue-100">내 스펙</span>
-                    <span class="text-sm font-extrabold">갱신하러 가기</span>
-                </a>
-
-                <!-- 2. 곰두리 성장 버튼 -->
-                <button onclick="showToast('강화 기능은 준비 중입니다.')" class="w-full py-4 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow-sm bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 transition">
-                    <i class="fa-solid fa-wand-magic-sparkles text-lg text-purple-600"></i>
-                    <span class="text-xs font-bold text-slate-500">곰두리</span>
+                    <span class="text-xs font-bold text-blue-100">곰두리</span>
                     <span class="text-sm font-extrabold">강화하기</span>
-                </button>
+                </a>
 
                 <!-- 3. 전투 시작 버튼 -->
                 <button onclick="startBattle()" class="w-full py-5 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow-lg bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white transition transform active:scale-95">
@@ -192,59 +219,58 @@
             </div>
 
             <!-- 오른쪽: 상대 스펙 카드 영역 (lg:col-span-5) -->
-            <div class="lg:col-span-5 space-y-4">
-                <div class="card-panel rounded-3xl p-6 flex flex-col justify-between">
+            <div class="lg:col-span-5 space-y-4 lg:space-y-3 lg:min-h-0 lg:flex lg:flex-col">
+                <div class="card-panel rounded-3xl p-6 lg:p-4 flex flex-col justify-between">
                     <div>
-                        <div class="mb-4">
+                        <div class="mb-4 lg:mb-2">
                             <div class="flex items-center justify-between font-bold text-xs mb-1 text-rose-500">
                                 <span><i class="fa-solid fa-heart text-rose-500"></i> 상대 체력 (HP)</span>
-                                <span class="text-slate-700 font-extrabold">364</span>
+                                <span id="enemyHp" class="text-slate-700 font-extrabold">-</span>
                             </div>
                             <div class="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-rose-100 p-0.5">
                                 <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full w-full"></div>
                             </div>
                         </div>
-                        <div class="my-6 flex items-center justify-center relative p-4">
+                        <div class="my-6 lg:my-2 flex items-center justify-center relative p-4 lg:p-2">
                             <div class="absolute inset-0 bg-purple-500/10 rounded-full blur-2xl"></div>
-                            <!-- 상대 캐릭터 -->
-                            <div class="w-36 h-36 rounded-3xl bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-7xl shadow-xl transform hover:scale-105 transition cursor-pointer select-none">
-                                🦁
+                            <!-- 상대: 빨간 악마 곰두리 (원본 방향 그대로: 왼쪽의 나를 바라봄) -->
+                            <div class="w-32 h-36 lg:w-32 lg:h-36 rounded-3xl bg-white border border-slate-200 flex items-end justify-center shadow-xl transform hover:scale-105 transition select-none overflow-hidden" role="img" aria-label="전투 준비 중인 악마 곰두리">
+                                <div class="duri-ready delay h-full flex items-end justify-center">
+                                    <img src="duri_evil.png" alt="" draggable="false" class="h-full w-auto max-w-none">
+                                </div>
                             </div>
                         </div>
                         <div class="bg-slate-50 rounded-2xl p-3 border border-slate-200 text-center">
-                            <div class="text-xs font-bold text-purple-600">연습 상대 라이온 (예시)</div>
-                            <div class="text-lg font-black text-slate-800 mt-0.5">공격력 (ATK): <span class="text-purple-600">82.0</span></div>
+                            <div id="enemyName" class="text-xs font-bold text-purple-600">-</div>
+                            <div class="text-lg font-black text-slate-800 mt-0.5">공격력 (ATK): <span id="enemyAtk" class="text-purple-600">-</span></div>
                         </div>
                     </div>
                 </div>
 
                 <!-- 상대 스펙 상세 정보 박스 -->
-                <div class="card-panel rounded-3xl p-5 space-y-3">
+                <div class="card-panel rounded-3xl p-5 lg:p-3 space-y-3 lg:space-y-2 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
                     <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2"><i class="fa-solid fa-shield-halved text-purple-500"></i> 연습 상대 스펙 (가상)</h3>
-                    <div class="space-y-2 text-xs">
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                    <div class="space-y-2 lg:space-y-1.5 text-xs lg:text-[11px]">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
                             <span class="text-slate-500 font-medium">학년도 / 평점</span>
-                            <strong class="text-slate-800">3학년 · 3.90 / 4.5 (이수 80학점)</strong>
+                            <strong id="enemyGpa" class="text-slate-800">-</strong>
                         </div>
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
                             <span class="text-slate-500 font-medium">어학 점수</span>
-                            <strong class="text-slate-800">TOEIC 800점 (환산 반영)</strong>
+                            <strong id="enemyLang" class="text-slate-800">-</strong>
                         </div>
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
                             <div class="flex justify-between items-center text-slate-500 font-semibold">
-                                <span>보유 자격증 (가산점 총 +20점)</span>
+                                <span id="enemyCertTotal">보유 자격증</span>
                             </div>
-                            <div class="text-slate-700 space-y-1 pl-2 border-l-2 border-purple-200">
-                                <div class="flex justify-between"><span>• 정보처리기사</span><span class="text-purple-600 font-bold">+10점</span></div>
+                            <div id="enemyCertList" class="text-slate-700 space-y-1 pl-2 border-l-2 border-purple-200">
+                                <div class="flex justify-between"><span>• 운전면허</span><span class="text-purple-600 font-bold">+5점</span></div>
                                 <div class="flex justify-between"><span>• SQLD</span><span class="text-purple-600 font-bold">+10점</span></div>
                             </div>
                         </div>
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
+                        <div class="p-3 lg:p-2 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1.5">
                             <div class="flex justify-between items-center text-slate-500 font-semibold">
-                                <span>대외 활동 (가산점 총 +10점)</span>
-                            </div>
-                            <div class="text-slate-700 space-y-1 pl-2 border-l-2 border-purple-200">
-                                <div class="flex justify-between"><span>• 오픈소스 프로젝트 기여</span><span class="text-purple-600 font-bold">+10점</span></div>
+                                <span>대외 활동</span>
                             </div>
                         </div>
                     </div>
@@ -254,43 +280,93 @@
         </div>
     </main>
 
+    <!-- 스펙 배틀 전장 (배경이 흐려지며 Map.png 전장이 나타남) -->
+    <div id="battleOverlay" class="fixed inset-0 z-[200] hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="스펙 배틀">
+        <div id="battleStage" class="w-full max-w-4xl">
+            <div id="battleArena" class="relative w-full rounded-3xl overflow-hidden border-4 border-white/90 shadow-2xl select-none" style="aspect-ratio: 828 / 316; background: url('Map.png') center / cover no-repeat;">
+                <!-- 체력바 -->
+                <div class="absolute top-2 left-2 right-2 flex justify-between gap-3 z-10">
+                    <div class="w-[44%] bg-white/85 backdrop-blur rounded-xl px-3 py-1.5 shadow">
+                        <div class="flex justify-between text-[11px] font-extrabold text-slate-700"><span id="bfMeName" class="truncate">나</span><span><span id="bfMeHpText">0</span> / <span id="bfMeHpMax">0</span></span></div>
+                        <div class="h-2.5 bg-slate-200 rounded-full overflow-hidden mt-1"><div id="bfMeBar" class="h-full rounded-full bg-gradient-to-r from-rose-500 to-red-400" style="width:100%; transition: width .35s ease"></div></div>
+                    </div>
+                    <div id="bfRound" class="self-center text-[11px] font-black text-white bg-slate-900/60 px-3 py-1 rounded-full whitespace-nowrap">READY</div>
+                    <div class="w-[44%] bg-white/85 backdrop-blur rounded-xl px-3 py-1.5 shadow">
+                        <div class="flex justify-between text-[11px] font-extrabold text-slate-700"><span id="bfEnName" class="truncate">상대</span><span><span id="bfEnHpText">0</span> / <span id="bfEnHpMax">0</span></span></div>
+                        <div class="h-2.5 bg-slate-200 rounded-full overflow-hidden mt-1"><div id="bfEnBar" class="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500" style="width:100%; transition: width .35s ease"></div></div>
+                    </div>
+                </div>
+                <!-- 캐릭터 -->
+                <div id="bfMe" class="bf-fighter bf-me"><div class="bf-body duri-ready"><img src="duri1_cut.png" alt="" draggable="false"></div></div>
+                <div id="bfEn" class="bf-fighter bf-en"><div class="bf-body duri-ready delay"><img src="duri_evil_cut.png" alt="" draggable="false"></div></div>
+                <div id="bfFx" class="absolute inset-0 pointer-events-none"></div>
+                <div id="bfFlash" class="bf-flash"></div>
+                <!-- 결과 -->
+                <div id="bfResult" class="absolute inset-0 hidden flex-col items-center justify-center gap-3 bg-slate-900/45 z-20">
+                    <div id="bfResultTitle" class="text-4xl sm:text-5xl font-black text-white drop-shadow-lg"></div>
+                    <div id="bfResultSub" class="text-xs sm:text-sm font-bold text-white/90"></div>
+                    <button type="button" onclick="closeBattle()" class="mt-1 px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-800 font-extrabold text-sm rounded-xl shadow-lg transition"><i class="fa-solid fa-arrow-left mr-1.5"></i> 곰두리 키우기로 돌아가기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="presence.js"></script>
+    <script src="battle.js"></script>
     <script>
         function esc(v) {
             return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
+        // 상대(가상) 스펙: 평균 3.18 / 85학점 / 어학 560점 / 자격증 운전면허 → 체력 270, 공격력 33
+        const ENEMY = { name: '첨단AI공학과 홍길동', gpa: 3.18, credits: 85, langType: 'TOEIC', langScore: 560, certs: ['운전면허'] };
+        const ENEMY_STATS = calcStats(ENEMY);
+        let MY_STATS = null;   // 스펙이 있을 때만 채워짐
+
         window.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('enemyName').innerText = ENEMY.name;
+            document.getElementById('enemyHp').innerText = ENEMY_STATS.hp;
+            document.getElementById('enemyAtk').innerText = fmtNum(ENEMY_STATS.atk);
+            document.getElementById('enemyGpa').innerText = `${ENEMY.gpa.toFixed(2)} / 4.5 (이수 ${ENEMY.credits}학점)`;
+            document.getElementById('enemyLang').innerText = `${ENEMY.langType} ${ENEMY.langScore}점 (+${fmtNum(ENEMY_STATS.langPoint)}점)`;
+            document.getElementById('enemyCertTotal').innerText = `보유 자격증 (총 +${ENEMY_STATS.certTotal}점)`;
+            document.getElementById('enemyCertList').innerHTML = ENEMY.certs.map(c =>
+                `<div class="flex justify-between"><span>• ${esc(c)}</span><span class="text-purple-600 font-bold">+${certPoint(c)}점</span></div>`).join('');
             const me = await fetch('/api/me', { credentials: 'same-origin' });
             if (!me.ok) { location.href = 'index.html'; return; }
             const user = await me.json();
             const data = await (await fetch('/api/data', { credentials: 'same-origin' })).json();
             const spec = data.spec;
-            const name = (spec && spec.name) || user.email.split('@')[0];
+            const email = user.email || '';
+            const name = (spec && spec.name) || (email ? email.split('@')[0] : '학생');
             document.getElementById('profileName').innerText = name;
-            document.getElementById('profileId').innerText = user.email;
+            document.getElementById('profileId').innerText = email || '이 브라우저에 저장됨';
             document.getElementById('profileMajor').innerText = (spec && spec.major) || '전공 미입력';
             document.getElementById('displayMyName').innerText = name;
 
             if (!spec) {
-                document.getElementById('displayGradeGpa').innerText = '스펙 미입력 - 대시보드에서 입력하세요';
+                document.getElementById('displayGradeGpa').innerText = '스펙 미입력 - 성적관리에서 입력하세요';
                 document.getElementById('displayAtk').innerText = '0';
-                document.getElementById('displayHp').innerText = '300';
+                document.getElementById('displayHp').innerText = '0';
                 return;
             }
             const grades = (spec.semesterGrades || []).filter(g => g != null);
             const gpa = grades.length ? +(grades.reduce((a, b) => a + b, 0) / grades.length).toFixed(2) : 0;
             const certs = spec.certs || [];
             const extras = spec.extra ? spec.extra.split(/[,/]/).map(e => e.trim()).filter(Boolean) : [];
-            const atk = (gpa * 10 + spec.credits / 5 + certs.length * 10 + (spec.langType ? 15 : 0) + extras.length * 10).toFixed(1);
-            document.getElementById('displayHp').innerText = 300 + Math.round(spec.credits * 0.8);
-            document.getElementById('displayAtk').innerText = atk;
+            const stats = calcStats({ gpa, credits: spec.credits, langScore: spec.langScore, certs });
+            MY_STATS = stats;
+            document.getElementById('displayHp').innerText = stats.hp;
+            document.getElementById('displayAtk').innerText = fmtNum(stats.atk);
             document.getElementById('displayGradeGpa').innerText = `${gpa} / ${spec.maxGpa} (이수 ${spec.credits}학점)`;
-            document.getElementById('displayLang').innerText = spec.langType ? `${spec.langType} ${spec.langScore}` : '미입력';
+            document.getElementById('displayLang').innerText = spec.langType
+                ? (stats.langPoint > 0 ? `${spec.langType} ${spec.langScore} (+${fmtNum(stats.langPoint)}점)` : `${spec.langType} ${spec.langScore} (환산 불가)`)
+                : '미입력';
             document.getElementById('displayCertList').innerHTML = certs.length
-                ? certs.map(c => `<div class="flex justify-between"><span>• ${esc(c)}</span><span class="text-blue-600 font-bold">+10점</span></div>`).join('')
+                ? certs.map(c => `<div class="flex justify-between"><span>• ${esc(c)}</span><span class="text-blue-600 font-bold">+${certPoint(c)}점</span></div>`).join('')
                 : '<div class="text-slate-400">• 입력된 자격증 없음</div>';
             document.getElementById('displayExtraList').innerHTML = extras.length
-                ? extras.map(e => `<div class="flex justify-between"><span>• ${esc(e)}</span><span class="text-blue-600 font-bold">+10점</span></div>`).join('')
+                ? extras.map(e => `<div>• ${esc(e)}</div>`).join('')
                 : '<div class="text-slate-400">• 입력된 대외활동 없음</div>';
         });
 
@@ -322,15 +398,124 @@
             }
         }
 
-        function startBattle() {
-            const myAtk = parseFloat(document.getElementById('displayAtk').innerText) || 0;
-            const enemyAtk = 82.0;
+        // ================= 스펙 배틀 =================
+        // 매 라운드 두 곰두리가 동시에 부딪히며, 서로의 공격력만큼 상대 체력이 깎입니다.
+        // 먼저 체력이 0 이하가 되는 쪽이 패배, 동시에 0 이하면 무승부.
+        let battleRunning = false;
+        let battleTimers = [];
+        const $b = (id) => document.getElementById(id);
+        const bfLater = (fn, ms) => { const t = setTimeout(fn, ms); battleTimers.push(t); return t; };
 
-            if (myAtk > enemyAtk) {
-                showToast(`🎉 승리! 내 공격력(${myAtk})이 라이벌(${enemyAtk})을 압도했습니다!`);
-            } else {
-                showToast(`⚔️ 접전! 스펙을 더 쌓아 재도전해보세요! (내 공격력: ${myAtk})`);
+        function bfSetBar(side, hp, max) {
+            $b(`bf${side}Bar`).style.width = (max > 0 ? Math.max(0, hp / max * 100) : 0) + '%';
+            $b(`bf${side}HpText`).innerText = Math.max(0, Math.ceil(hp));
+        }
+
+        function bfFloat(fighterId, text) {
+            const arena = $b('battleArena').getBoundingClientRect();
+            const r = $b(fighterId).getBoundingClientRect();
+            const el = document.createElement('div');
+            el.className = 'bf-dmg';
+            el.textContent = text;
+            el.style.left = (r.left - arena.left + r.width / 2 - 16) + 'px';
+            el.style.top = (r.top - arena.top + r.height * 0.1) + 'px';
+            $b('bfFx').appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function bfRestart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+        function startBattle() {
+            if (battleRunning) return;
+            if (!MY_STATS) return showToast('스펙이 없어요! 성적관리 탭에서 먼저 입력해 주세요.');
+            const myMax = MY_STATS.hp, enMax = ENEMY_STATS.hp;
+            const myAtk = MY_STATS.atk, enAtk = ENEMY_STATS.atk;
+            if (myMax <= 0) return showToast('체력이 0이라 배틀을 시작할 수 없어요. 평균학점과 이수학점을 입력해 주세요.');
+            battleRunning = true;
+            let myHp = myMax, enHp = enMax, round = 0;
+
+            // 초기화
+            $b('bfMeName').innerText = $b('displayMyName').innerText || '나';
+            $b('bfEnName').innerText = ENEMY.name;
+            $b('bfMeHpMax').innerText = myMax; $b('bfEnHpMax').innerText = enMax;
+            bfSetBar('Me', myHp, myMax); bfSetBar('En', enHp, enMax);
+            $b('bfRound').innerText = 'READY';
+            $b('bfResult').classList.add('hidden'); $b('bfResult').classList.remove('flex');
+            $b('bfFx').innerHTML = '';
+            ['bfMe', 'bfEn'].forEach(id => { $b(id).classList.remove('lunge'); $b(id).firstElementChild.classList.remove('ko', 'hit'); });
+            $b('bfMe').firstElementChild.classList.add('duri-ready'); $b('bfEn').firstElementChild.classList.add('duri-ready');
+
+            // 흐려지면서 전장 등장
+            const ov = $b('battleOverlay');
+            ov.classList.remove('leaving', 'on');
+            ov.classList.remove('hidden'); ov.classList.add('flex');
+            void ov.offsetWidth;
+            ov.classList.add('on');
+
+            // 라운드 간격: 끝나기까지 너무 길어지지 않도록 필요 라운드 수에 맞춰 조절
+            const need = Math.min(myAtk > 0 ? Math.ceil(enMax / myAtk) : Infinity, enAtk > 0 ? Math.ceil(myMax / enAtk) : Infinity);
+            const interval = Number.isFinite(need) ? Math.min(1100, Math.max(260, 9000 / need)) : 700;
+            const maxRounds = (myAtk <= 0 && enAtk <= 0) ? 3 : 2000;
+
+            function finish(result) {
+                const meBody = $b('bfMe').firstElementChild, enBody = $b('bfEn').firstElementChild;
+                meBody.classList.remove('duri-ready'); enBody.classList.remove('duri-ready');
+                if (result === 'lose') meBody.classList.add('ko');
+                if (result === 'win') enBody.classList.add('ko');
+                if (result === 'draw' && myHp <= 0 && enHp <= 0) { meBody.classList.add('ko'); enBody.classList.add('ko'); }
+                const t = { win: ['🎉 승리!', `${ENEMY.name}의 체력을 먼저 모두 깎았어요!`],
+                            lose: ['😢 패배...', `${ENEMY.name}에게 체력이 먼저 바닥났어요. 성적관리에서 스펙을 올려 재도전!`],
+                            draw: ['🤝 무승부', myHp <= 0 && enHp <= 0 ? '두 곰두리가 동시에 쓰러졌어요!' : '서로 공격력이 없어 승부가 나지 않았어요.'] }[result];
+                bfLater(() => {
+                    $b('bfRound').innerText = 'FINISH';
+                    $b('bfResultTitle').innerText = t[0];
+                    $b('bfResultSub').innerText = `${round}라운드 · 내 체력 ${Math.max(0, Math.ceil(myHp))} / ${myMax} · 상대 체력 ${Math.max(0, Math.ceil(enHp))} / ${enMax}`
+                        + '\n' + t[1];
+                    $b('bfResultSub').style.whiteSpace = 'pre-line';
+                    $b('bfResultSub').style.textAlign = 'center';
+                    $b('bfResult').classList.remove('hidden'); $b('bfResult').classList.add('flex');
+                }, 900);
             }
+
+            function doRound() {
+                round++;
+                $b('bfRound').innerText = `ROUND ${round}`;
+                // 서로를 향해 동시에 돌진
+                const a = $b('bfMe').getBoundingClientRect(), b = $b('bfEn').getBoundingClientRect();
+                const dx = Math.max(10, (b.left - a.right) / 2 - 6);
+                ['bfMe', 'bfEn'].forEach(id => { $b(id).style.setProperty('--dx', dx + 'px'); bfRestart($b(id), 'lunge'); });
+                // 충돌 순간(애니메이션의 약 38% 지점)에 동시에 피해 적용
+                bfLater(() => {
+                    myHp = Math.max(0, +(myHp - enAtk).toFixed(2));
+                    enHp = Math.max(0, +(enHp - myAtk).toFixed(2));
+                    bfSetBar('Me', myHp, myMax); bfSetBar('En', enHp, enMax);
+                    bfFloat('bfMe', `-${fmtNum(enAtk)}`); bfFloat('bfEn', `-${fmtNum(myAtk)}`);
+                    bfRestart($b('bfMe').firstElementChild, 'hit'); bfRestart($b('bfEn').firstElementChild, 'hit');
+                    bfRestart($b('bfFlash'), 'go'); bfRestart($b('battleArena'), 'bf-shake');
+                    if (myHp <= 0 || enHp <= 0) {
+                        finish(myHp <= 0 && enHp <= 0 ? 'draw' : (myHp <= 0 ? 'lose' : 'win'));
+                    } else if (round >= maxRounds) {
+                        finish('draw');
+                    } else {
+                        bfLater(doRound, Math.max(interval - 210, 120));
+                    }
+                }, 210);
+            }
+            bfLater(doRound, 1100);   // 전장이 나타난 뒤 시작
+        }
+
+        // 결과 화면 → 전장이 사라지고 흐려졌던 화면이 선명해지며 곰두리 키우기 화면으로 복귀
+        function closeBattle() {
+            const ov = $b('battleOverlay');
+            battleTimers.forEach(clearTimeout); battleTimers = [];
+            ov.classList.add('leaving');
+            setTimeout(() => {
+                ov.classList.remove('on');           // blur 10px → 0 (선명해짐)
+                setTimeout(() => {
+                    ov.classList.add('hidden'); ov.classList.remove('flex', 'leaving');
+                    battleRunning = false;
+                }, 750);
+            }, 300);
         }
     </script>
 </body>

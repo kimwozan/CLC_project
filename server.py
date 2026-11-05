@@ -53,6 +53,13 @@ PORT = int(os.environ.get("PORT", "8000"))
 # guest: 이메일 인증 없이 브라우저마다 익명 세션 자동 발급 / email: @kangwon.ac.kr 인증코드 로그인
 LOGIN_MODE = os.environ.get("LOGIN_MODE", "guest").strip().lower()
 GUEST_MAX_PER_HOUR_IP = 100
+# 게스트 기록은 페이지를 닫으면 삭제된다:
+#  - 페이지가 열려 있는 동안 클라이언트가 주기적으로 신호(ping)를 보낸다
+#  - 닫을 때 '떠남' 신호(leave)를 보내고, GRACE 초 안에 다시 열리지 않으면 삭제 (페이지 이동/새로고침은 유지)
+#  - 신호가 STALE 초 이상 끊긴 게스트도 삭제 (브라우저 강제 종료 등)
+GUEST_LEAVE_GRACE = int(os.environ.get("GUEST_LEAVE_GRACE", "10"))
+GUEST_STALE = int(os.environ.get("GUEST_STALE", "180"))
+GUEST_SWEEP_SEC = int(os.environ.get("GUEST_SWEEP_SEC", "5"))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "app.db"))
 ALLOWED_EMAIL_DOMAIN = os.environ.get("ALLOWED_EMAIL_DOMAIN", "kangwon.ac.kr").lower()
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"  # HTTPS 운영 시 1
@@ -137,6 +144,11 @@ def init_db():
                 verdict TEXT NOT NULL,
                 reasons TEXT NOT NULL,
                 fetched_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS guest_presence (
+                user_id INTEGER PRIMARY KEY REFERENCES users(id),
+                last_seen INTEGER NOT NULL,
+                leaving_at INTEGER
             );
             CREATE TABLE IF NOT EXISTS meta (
                 key TEXT PRIMARY KEY,
@@ -425,6 +437,41 @@ def job_refresher_loop():
         time.sleep(3600)
 
 
+def touch_guest(conn, user_id):
+    """게스트가 열려 있음을 기록하고 '떠남' 표시를 해제한다."""
+    conn.execute("INSERT OR REPLACE INTO guest_presence (user_id, last_seen, leaving_at) VALUES (?, ?, NULL)",
+                 (user_id, int(time.time())))
+
+
+def purge_guests():
+    """페이지를 닫은(또는 신호가 끊긴) 게스트의 계정·스펙·세션을 모두 삭제."""
+    now = int(time.time())
+    with _db_lock, db() as conn:
+        rows = conn.execute(
+            "SELECT u.id FROM users u LEFT JOIN guest_presence g ON g.user_id = u.id "
+            "WHERE u.email LIKE 'guest-%' AND ("
+            "  (g.leaving_at IS NOT NULL AND g.leaving_at < ?) "
+            "  OR COALESCE(g.last_seen, u.created_at) < ?)",
+            (now - GUEST_LEAVE_GRACE, now - GUEST_STALE)).fetchall()
+        for r in rows:
+            uid = r["id"]
+            conn.execute("DELETE FROM user_data WHERE user_id = ?", (uid,))
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+            conn.execute("DELETE FROM guest_presence WHERE user_id = ?", (uid,))
+            conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+    if rows:
+        print(f"[GUEST] 게스트 기록 {len(rows)}건 삭제", flush=True)
+
+
+def guest_purge_loop():
+    while True:
+        try:
+            purge_guests()
+        except Exception as e:  # noqa: BLE001
+            print(f"[GUEST] 정리 실패: {e}", flush=True)
+        time.sleep(GUEST_SWEEP_SEC)
+
+
 def save_env_values(values):
     """.env 의 해당 키만 갱신(다른 줄 보존). 값은 호출 전에 검증되어 있어야 한다."""
     path = os.path.join(BASE_DIR, ".env")
@@ -518,7 +565,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return dict(row) if row else None
 
     def session_cookie(self, token, max_age):
-        parts = [f"sid={token}", "Path=/", "HttpOnly", "SameSite=Lax", f"Max-Age={max_age}"]
+        parts = [f"sid={token}", "Path=/", "HttpOnly", "SameSite=Lax"]
+        if max_age is not None:          # None = 세션 쿠키 (브라우저를 닫으면 사라짐)
+            parts.append(f"Max-Age={max_age}")
         if COOKIE_SECURE:
             parts.append("Secure")
         return "; ".join(parts)
@@ -556,6 +605,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "/api/auth/verify": self.api_verify,
             "/api/auth/logout": self.api_logout,
             "/api/admin/naver-keys": self.api_set_keys,
+            "/api/guest/ping": self.api_guest_ping,
+            "/api/guest/leave": self.api_guest_leave,
         }
         if path in routes:
             return routes[path]()
@@ -651,6 +702,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             token = secrets.token_urlsafe(32)
             conn.execute("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
                          (sha256(token), uid, now + SESSION_TTL))
+            touch_guest(conn, uid)
         return token
 
     def api_me(self):
@@ -658,13 +710,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         u = self.current_user()
         if u:
             guest = u["email"].startswith("guest-")
+            if guest:
+                with _db_lock, db() as conn:
+                    touch_guest(conn, u["id"])
             return self.send_json(200, {"email": None if guest else u["email"], "guest": guest, "newsEnabled": news})
         if LOGIN_MODE == "guest":
             token = self.create_guest_session()
             if not token:
                 return self.send_json(429, {"error": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."})
             return self.send_json(200, {"email": None, "guest": True, "newsEnabled": news},
-                                  [("Set-Cookie", self.session_cookie(token, SESSION_TTL))])
+                                  [("Set-Cookie", self.session_cookie(token, None))])
         return self.send_json(401, {"error": "로그인이 필요합니다."})
 
     # ---- 사용자 데이터 (spec, pet) ----
@@ -723,6 +778,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with _news_lock:
             _news_cache[query] = (now, payload)
         return self.send_json(200, payload)
+
+    # ---- 게스트 접속 상태 (페이지를 닫으면 기록 삭제) ----
+    def api_guest_ping(self):
+        u = self.current_user()
+        if not u:
+            # 게스트 모드에서 세션이 정리된 경우: 클라이언트가 새로고침해 새 게스트로 시작하도록 알림
+            return self.send_json(401, {"error": "세션이 없습니다.", "guestExpired": LOGIN_MODE == "guest"})
+        if u["email"].startswith("guest-"):
+            with _db_lock, db() as conn:
+                touch_guest(conn, u["id"])
+        return self.send_json(200, {"ok": True})
+
+    def api_guest_leave(self):
+        u = self.current_user()
+        if u and u["email"].startswith("guest-"):
+            with _db_lock, db() as conn:
+                conn.execute("UPDATE guest_presence SET leaving_at = ? WHERE user_id = ?", (int(time.time()), u["id"]))
+        return self.send_json(200, {"ok": True})
 
     # ---- 채용정보 ----
     def api_jobs(self):
@@ -863,6 +936,8 @@ def main():
     if not SMTP_HOST:
         print("⚠️  SMTP 미설정: 인증코드가 메일 대신 이 콘솔에 출력됩니다 (개발 모드).", flush=True)
     threading.Thread(target=job_refresher_loop, daemon=True).start()
+    if LOGIN_MODE == "guest":
+        threading.Thread(target=guest_purge_loop, daemon=True).start()
     http.server.ThreadingHTTPServer.allow_reuse_address = True
     httpd = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"🚀 캠퍼스 스펙 트래커: http://{'localhost' if HOST in ('127.0.0.1', '0.0.0.0') else HOST}:{PORT}", flush=True)
